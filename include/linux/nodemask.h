@@ -430,6 +430,7 @@ static inline int num_node_state(enum node_states state)
 	return nodes_weight(node_states[state]);
 }
 
+// IMRT >> __state가 설정된 node에 대해 foreach
 #define for_each_node_state(__node, __state) \
 	for_each_node_mask((__node), node_states[__state])
 

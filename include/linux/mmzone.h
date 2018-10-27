@@ -24,8 +24,10 @@
 #ifndef CONFIG_FORCE_MAX_ZONEORDER
 #define MAX_ORDER 11
 #else
+// IMRT >> 11
 #define MAX_ORDER CONFIG_FORCE_MAX_ZONEORDER
 #endif
+// IMRT >> 1 << 10 == 1024
 #define MAX_ORDER_NR_PAGES (1 << (MAX_ORDER - 1))
 
 /*

@@ -225,11 +225,13 @@ static void __init reserve_elfcorehdr(void)
  */
 static phys_addr_t __init max_zone_dma_phys(void)
 {
+	// IMRT >> DRAM start > 4G => start / DRAM start < 4G => 0
 	phys_addr_t offset = memblock_start_of_DRAM() & GENMASK_ULL(63, 32);
+	// IMRT >> DRAM end > offset + 4G => offset + 4G / else DRAM end
 	return min(offset + (1ULL << 32), memblock_end_of_DRAM());
 }
 
-#ifdef CONFIG_NUMA
+#ifdef CONFIG_NUMA // IMRT >> yes!
 
 static void __init zone_sizes_init(unsigned long min, unsigned long max)
 {
@@ -237,7 +239,8 @@ static void __init zone_sizes_init(unsigned long min, unsigned long max)
 
 	if (IS_ENABLED(CONFIG_ZONE_DMA32))
 		max_zone_pfns[ZONE_DMA32] = PFN_DOWN(max_zone_dma_phys());
-	max_zone_pfns[ZONE_NORMAL] = max;
+	// IMRT >> DMA32 빼고 나머지 전부 NORMAL
+	max_zone_pfns[ZONE_NORMAL] = max; 
 
 	free_area_init_nodes(max_zone_pfns);
 }

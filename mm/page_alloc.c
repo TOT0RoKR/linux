@@ -5725,6 +5725,7 @@ void __meminit get_pfn_range_for_nid(unsigned int nid,
  * assumption is made that zones within a node are ordered in monotonic
  * increasing memory addresses so that the "highest" populated zone is used
  */
+// IMRT >> movable로 변환할 zone을 찾음. == 해당 노드의 최상단 ZONE
 static void __init find_usable_zone_for_movable(void)
 {
 	int zone_index;
@@ -5732,12 +5733,14 @@ static void __init find_usable_zone_for_movable(void)
 		if (zone_index == ZONE_MOVABLE)
 			continue;
 
+		// IMRT >> 존재하는 최상단 ZONE을 만나면 break.
 		if (arch_zone_highest_possible_pfn[zone_index] >
 				arch_zone_lowest_possible_pfn[zone_index])
 			break;
 	}
 
 	VM_BUG_ON(zone_index == -1);
+	// IMRT >> 해당 노드의 최상단 ZONE의 index를 반환. (현재 == ZONE_NORMAL)
 	movable_zone = zone_index;
 }
 
@@ -6423,12 +6426,14 @@ static void __init find_zone_movable_pfns_for_nodes(void)
 	struct memblock_region *r;
 
 	/* Need to find movable_zone earlier when movable_node is specified. */
+	// MOVABLE로 만들 ZONE을 찾음. // movable_zone (전역변수)
 	find_usable_zone_for_movable();
 
 	/*
 	 * If movable_node is specified, ignore kernelcore and movablecore
 	 * options.
 	 */
+	// IMRT >> x86인 듯 하다... 분석안함. 일단은 false 맞음(CONFIG_MEMORY_HOTPLUG == n).
 	if (movable_node_is_enabled()) {
 		for_each_memblock(memory, r) {
 			if (!memblock_is_hotpluggable(r))
@@ -6448,6 +6453,8 @@ static void __init find_zone_movable_pfns_for_nodes(void)
 	/*
 	 * If kernelcore=mirror is specified, ignore movablecore option
 	 */
+	// IMRT >> kernelcore가 mirrored 되어 있을 때, mirrored 되어있지 않고
+	// 주소가 4G 이상인 memory region을 movable로 만듦. (모든 노드에 대해)
 	if (mirrored_kernelcore) {
 		bool mem_below_4gb_not_mirrored = false;
 
@@ -6459,6 +6466,9 @@ static void __init find_zone_movable_pfns_for_nodes(void)
 
 			usable_startpfn = memblock_region_memory_base_pfn(r);
 
+			// IMRT >> mirrored_kernelcore 를 사용하면 4G 이하 주소는 모두 미러 되는 것이
+			// 정상이나 mirrored 영역을 빠져나왔는데도 4G 이하이면 warn을 띄워
+			// 주기 위한 코드. 4G 이하면 continue하므로  MOVABLE로 만들지 않음.
 			if (usable_startpfn < 0x100000) {
 				mem_below_4gb_not_mirrored = true;
 				continue;
@@ -6483,6 +6493,10 @@ static void __init find_zone_movable_pfns_for_nodes(void)
 	 * will be used for required_kernelcore if it's greater than
 	 * what movablecore would have allowed.
 	 */
+	// IMRT >> if moveablecore + kernelcore > totalpages
+	// kernelcore = kernelcore
+	// else
+	// kernelcore = totalpages - movablecore
 	if (required_movablecore) {
 		unsigned long corepages;
 
@@ -6506,11 +6520,18 @@ static void __init find_zone_movable_pfns_for_nodes(void)
 		goto out;
 
 	/* usable_startpfn is the lowest possible pfn ZONE_MOVABLE can be at */
+	// IMRT >> movable zone으로 만들 zone의 startpfn
 	usable_startpfn = arch_zone_lowest_possible_pfn[movable_zone];
 
 restart:
 	/* Spread kernelcore memory as evenly as possible throughout nodes */
+	// IMRT >> kernelcore를 퍼센트로 관리 하다가 전체 page개수에 비례해서
+	// 페이지 수를 알아냄. required_kernelcore는 전체 page에 대한
+	// kernelcore page개수이므로 노드의 개수로 나누어서 각각의 node별
+	// kernelcore page수를 구한다. (kernelcore page를 node별로 분산)
 	kernelcore_node = required_kernelcore / usable_nodes;
+	
+	// IMRT >> N_MEMORY state를 가진 node만 foreach
 	for_each_node_state(nid, N_MEMORY) {
 		unsigned long start_pfn, end_pfn;
 
@@ -6530,6 +6551,7 @@ restart:
 		kernelcore_remaining = kernelcore_node;
 
 		/* Go through each range of PFNs within this node */
+		// IMRT >> 인자 nid에 해당하는 노드의 memblock memory region의 start, end pfn 받아오는 foreach
 		for_each_mem_pfn_range(i, nid, &start_pfn, &end_pfn, NULL) {
 			unsigned long size_pages;
 
@@ -6538,6 +6560,9 @@ restart:
 				continue;
 
 			/* Account for what is only usable for kernelcore */
+			// IMRT >> MOVABLE로 사용할 ZONE보다 아래에 있는 ZONE부분을 kernelcore로 만듦. 
+			// memblock size를 계산해서 그만큼의 page 수를 kernelcore_remaining에서
+			// 차감.
 			if (start_pfn < usable_startpfn) {
 				unsigned long kernel_pages;
 				kernel_pages = min(end_pfn, usable_startpfn)
@@ -6560,6 +6585,8 @@ restart:
 					zone_movable_pfn[nid] = end_pfn;
 					continue;
 				}
+				// IMRT >> MOVABLE로 사용할 ZONE까지 도착.
+				// 남은 memblock 부분을 memblock 시작으로 바꿈.
 				start_pfn = usable_startpfn;
 			}
 
@@ -6568,9 +6595,12 @@ restart:
 			 * start_pfn->end_pfn. Calculate size_pages as the
 			 * number of pages used as kernelcore
 			 */
+			// IMRT >> memblock size로 kernelcore로 사용할 페이지 개수 계산.
 			size_pages = end_pfn - start_pfn;
+			// IMRT >> 요구 kernelcore보다 memblock size가 더 크면 사이즈를 줄임.
 			if (size_pages > kernelcore_remaining)
 				size_pages = kernelcore_remaining;
+			// IMRT >> ZONE_MOVABLE start 위치 갱신. (size_pages만큼)
 			zone_movable_pfn[nid] = start_pfn + size_pages;
 
 			/*
@@ -6578,9 +6608,12 @@ restart:
 			 * break if the kernelcore for this node has been
 			 * satisfied
 			 */
+			// IMRT >> MOVABLE로 사용할 존에서 size_pages만큼 
+			// kernelcore를 차감.
 			required_kernelcore -= min(required_kernelcore,
 								size_pages);
 			kernelcore_remaining -= size_pages;
+			// IMRT >> 해당 node에 만들 kernelcore 영역을 잡는 것을 완료함.
 			if (!kernelcore_remaining)
 				break;
 		}
@@ -6592,18 +6625,23 @@ restart:
 	 * along on the nodes that still have memory until kernelcore is
 	 * satisfied
 	 */
+	// IMRT >> required_kernelcore % usable_nodes > 0 일 때 나머지를 다시 분산.
+	// required_kernelcore < usable_nodes 가 될 때까지.
+	// 근데 말이 안됨. 10 % 3 > 2 라는 의미임. 무조건 a % b <= b-1이기 때문에;;
 	usable_nodes--;
 	if (usable_nodes && required_kernelcore > usable_nodes)
 		goto restart;
 
 out2:
 	/* Align start of ZONE_MOVABLE on all nids to MAX_ORDER_NR_PAGES */
+	// IMRT >> zone_movable_pfn을 MAX_ORDER_NR_PAGES(1024) 배수를 맞춰줌.
 	for (nid = 0; nid < MAX_NUMNODES; nid++)
 		zone_movable_pfn[nid] =
 			roundup(zone_movable_pfn[nid], MAX_ORDER_NR_PAGES);
 
 out:
 	/* restore the node_state */
+	// IMRT >> 지금은 의미 없는듯.
 	node_states[N_MEMORY] = saved_node_state;
 }
 
@@ -6651,8 +6689,10 @@ void __init free_area_init_nodes(unsigned long *max_zone_pfn)
 	memset(arch_zone_highest_possible_pfn, 0,
 				sizeof(arch_zone_highest_possible_pfn));
 
+	// IMRT >> active 되어있는 region의 가장 작은 pfn
 	start_pfn = find_min_pfn_with_active_regions();
 
+	// IMRT >> ZONE 별로 start와 end pfn 기록.
 	for (i = 0; i < MAX_NR_ZONES; i++) {
 		if (i == ZONE_MOVABLE)
 			continue;
@@ -6665,6 +6705,9 @@ void __init free_area_init_nodes(unsigned long *max_zone_pfn)
 	}
 
 	/* Find the PFNs that ZONE_MOVABLE begins at in each node */
+	// IMRT >> ZONE_MOVABLE 사용 이유 중 하나 : https://lwn.net/Articles/368869/
+	// 커널페이지를 moveable하게 만들기 : https://lwn.net/Articles/650917/
+	// IMRT >> 
 	memset(zone_movable_pfn, 0, sizeof(zone_movable_pfn));
 	find_zone_movable_pfns_for_nodes();
 
