@@ -5801,6 +5801,8 @@ static unsigned long __meminit zone_spanned_pages_in_node(int nid,
 	/* Get the start and end of the zone */
 	*zone_start_pfn = arch_zone_lowest_possible_pfn[zone_type];
 	*zone_end_pfn = arch_zone_highest_possible_pfn[zone_type];
+	// IMRT > Cause of ZONE_MOVABLE case, start_pfn,  end_pfn should be adjusted.
+ 	adjust_zone_range_for_zone_movable(nid, zone_type,
 	adjust_zone_range_for_zone_movable(nid, zone_type,
 				node_start_pfn, node_end_pfn,
 				zone_start_pfn, zone_end_pfn);
@@ -5825,15 +5827,18 @@ unsigned long __meminit __absent_pages_in_range(int nid,
 				unsigned long range_start_pfn,
 				unsigned long range_end_pfn)
 {
+	// IMRT > The number of spanned pages - memblock pages
 	unsigned long nr_absent = range_end_pfn - range_start_pfn;
 	unsigned long start_pfn, end_pfn;
 	int i;
 
+	// IMRT > Hole is out of memblock. SO, current nr_absent - pfns of all the memblocks in range = pfn of holes in range
 	for_each_mem_pfn_range(i, nid, &start_pfn, &end_pfn, NULL) {
 		start_pfn = clamp(start_pfn, range_start_pfn, range_end_pfn);
 		end_pfn = clamp(end_pfn, range_start_pfn, range_end_pfn);
 		nr_absent -= end_pfn - start_pfn;
 	}
+	// IMRT > Return number of hole pfns in range.
 	return nr_absent;
 }
 
@@ -5866,12 +5871,15 @@ static unsigned long __meminit zone_absent_pages_in_node(int nid,
 	if (!node_start_pfn && !node_end_pfn)
 		return 0;
 
+	// IMRT > clamp -> calculate middle value between three values.
+	// IMRT > Check and adjust just zone_start_pfn, zone_end_pfn
 	zone_start_pfn = clamp(node_start_pfn, zone_low, zone_high);
 	zone_end_pfn = clamp(node_end_pfn, zone_low, zone_high);
 
 	adjust_zone_range_for_zone_movable(nid, zone_type,
 			node_start_pfn, node_end_pfn,
 			&zone_start_pfn, &zone_end_pfn);
+	// IMRT > Return number of hole pages in range
 	nr_absent = __absent_pages_in_range(nid, zone_start_pfn, zone_end_pfn);
 
 	/*
@@ -5879,6 +5887,8 @@ static unsigned long __meminit zone_absent_pages_in_node(int nid,
 	 * Treat pages to be ZONE_MOVABLE in ZONE_NORMAL as absent pages
 	 * and vice versa.
 	 */
+	// IMRT > mirrored_kernelcore is assumed false for arm64
+	// IMRT > When using mirrored_kernelcore and ZONE_MOVABLE athe sametime, check for the error above. (mirrored memblock should not be ZONE_MOVEABLE and vice versa) 
 	if (mirrored_kernelcore && zone_movable_pfn[nid]) {
 		unsigned long start_pfn, end_pfn;
 		struct memblock_region *r;
@@ -5936,6 +5946,7 @@ static inline unsigned long __meminit zone_absent_pages_in_node(int nid,
 
 #endif /* CONFIG_HAVE_MEMBLOCK_NODE_MAP */
 
+// IMRT > Find and set totalpage number and zone information in pgdat.
 static void __meminit calculate_node_totalpages(struct pglist_data *pgdat,
 						unsigned long node_start_pfn,
 						unsigned long node_end_pfn,
@@ -5950,18 +5961,21 @@ static void __meminit calculate_node_totalpages(struct pglist_data *pgdat,
 		unsigned long zone_start_pfn, zone_end_pfn;
 		unsigned long size, real_size;
 
+		// IMRT >> Calculate exact start_pfn and end_pfn of zone, and return end_pfn-start_pfn (textbook page 286) 
 		size = zone_spanned_pages_in_node(pgdat->node_id, i,
 						  node_start_pfn,
 						  node_end_pfn,
 						  &zone_start_pfn,
 						  &zone_end_pfn,
 						  zones_size);
+		// IMRT >> Calculate number of pages in holes, and calculate real number of pages.
 		real_size = size - zone_absent_pages_in_node(pgdat->node_id, i,
 						  node_start_pfn, node_end_pfn,
 						  zholes_size);
 		if (size)
 			zone->zone_start_pfn = zone_start_pfn;
 		else
+			// IMRT > If certain zone does not exist, comes here
 			zone->zone_start_pfn = 0;
 		zone->spanned_pages = size;
 		zone->present_pages = real_size;
@@ -6086,6 +6100,7 @@ static void __paginginit free_area_init_core(struct pglist_data *pgdat)
 	enum zone_type j;
 	int nid = pgdat->node_id;
 
+	// IMRT > Set values for NUMA BALANCING
 	pgdat_resize_init(pgdat);
 #ifdef CONFIG_NUMA_BALANCING // TOT0Ro >> 설정 됨.
 	spin_lock_init(&pgdat->numabalancing_migrate_lock);
@@ -6245,9 +6260,11 @@ void __paginginit free_area_init_node(int nid, unsigned long *zones_size,
 #else
 	start_pfn = node_start_pfn;
 #endif
+	// IMRT > calculate total page numbers of a certain node. (Exclude holes)
 	calculate_node_totalpages(pgdat, start_pfn, end_pfn,
 				  zones_size, zholes_size);
 
+	// IMRT > CONFIG_FLA_NODE_MEM_MAP is false. Do nothing 
 	alloc_node_mem_map(pgdat);
 
 	reset_deferred_meminit(pgdat);
@@ -6262,6 +6279,8 @@ void __paginginit free_area_init_node(int nid, unsigned long *zones_size,
  * may be accessed (for example page_to_pfn() on some configuration accesses
  * flags). We must explicitly zero those struct pages.
  */
+// IMRT > For some reason, some phy memblock does not have physical node id.
+//        page struct of those memblocks should be zeroed.
 void __paginginit zero_resv_unavail(void)
 {
 	phys_addr_t start, end;
@@ -6273,6 +6292,7 @@ void __paginginit zero_resv_unavail(void)
 	 * physical memory backing.
 	 */
 	pgcnt = 0;
+	// IMRT > Find reserved and NID = -1 nodes. Count and zero those page sturcts. 
 	for_each_resv_unavail_range(i, &start, &end) {
 		for (pfn = PFN_DOWN(start); pfn < PFN_UP(end); pfn++) {
 			if (!pfn_valid(ALIGN_DOWN(pfn, pageblock_nr_pages)))
@@ -6304,6 +6324,7 @@ void __init setup_nr_node_ids(void)
 {
 	unsigned int highest;
 
+	// IMRT > By calling nodemask_t.bit, it is possible to call matching long array.
 	highest = find_last_bit(node_possible_map.bits, MAX_NUMNODES);
 	nr_node_ids = highest + 1;
 }
@@ -6633,6 +6654,7 @@ restart:
 	// IMRT >> required_kernelcore % usable_nodes > 0 일 때 나머지를 다시 분산.
 	// required_kernelcore < usable_nodes 가 될 때까지.
 	// 근데 말이 안됨. 10 % 3 > 2 라는 의미임. 무조건 a % b <= b-1이기 때문에;;
+	// 가 아님. node의 크기는 전부 같지 않을 수도 있기 때문.
 	usable_nodes--;
 	if (usable_nodes && required_kernelcore > usable_nodes)
 		goto restart;
@@ -6714,6 +6736,7 @@ void __init free_area_init_nodes(unsigned long *max_zone_pfn)
 	// 커널페이지를 moveable하게 만들기 : https://lwn.net/Articles/650917/
 	// IMRT >> 
 	memset(zone_movable_pfn, 0, sizeof(zone_movable_pfn));
+	// IMRT > Currently no Arm64 HW is ready for the memory hotplug function. (cf. High possibility to use figure b in textboot p255.)
 	find_zone_movable_pfns_for_nodes();
 
 	/* Print out the zone ranges */
@@ -6749,7 +6772,9 @@ void __init free_area_init_nodes(unsigned long *max_zone_pfn)
 			((u64)end_pfn << PAGE_SHIFT) - 1);
 
 	/* Initialise every node */
+	// IMRT > Just for verifying page->flags related parameters.
 	mminit_verify_pageflags_layout();
+	// IMRT > Set nr_node_ids. nr_node_ids = highest node id.
 	setup_nr_node_ids();
 	for_each_online_node(nid) {
 		pg_data_t *pgdat = NODE_DATA(nid);
@@ -6761,6 +6786,7 @@ void __init free_area_init_nodes(unsigned long *max_zone_pfn)
 			node_set_state(nid, N_MEMORY);
 		check_for_memory(pgdat, nid);
 	}
+	// IMRT > There is some 'unavailable' memblocks. zero them.
 	zero_resv_unavail();
 }
 
