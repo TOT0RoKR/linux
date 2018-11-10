@@ -5733,6 +5733,7 @@ static void __init find_usable_zone_for_movable(void)
 		if (zone_index == ZONE_MOVABLE)
 			continue;
 
+		// TOT0Ro >>  
 		// IMRT >> 존재하는 최상단 ZONE을 만나면 break.
 		if (arch_zone_highest_possible_pfn[zone_index] >
 				arch_zone_lowest_possible_pfn[zone_index])
@@ -6086,19 +6087,19 @@ static void __paginginit free_area_init_core(struct pglist_data *pgdat)
 	int nid = pgdat->node_id;
 
 	pgdat_resize_init(pgdat);
-#ifdef CONFIG_NUMA_BALANCING
+#ifdef CONFIG_NUMA_BALANCING // TOT0Ro >> 설정 됨.
 	spin_lock_init(&pgdat->numabalancing_migrate_lock);
 	pgdat->numabalancing_migrate_nr_pages = 0;
 	pgdat->numabalancing_migrate_next_window = jiffies;
 #endif
-#ifdef CONFIG_TRANSPARENT_HUGEPAGE
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE //TOT0Ro >> 설정 됨.
 	spin_lock_init(&pgdat->split_queue_lock);
 	INIT_LIST_HEAD(&pgdat->split_queue);
 	pgdat->split_queue_len = 0;
 #endif
 	init_waitqueue_head(&pgdat->kswapd_wait);
 	init_waitqueue_head(&pgdat->pfmemalloc_wait);
-#ifdef CONFIG_COMPACTION
+#ifdef CONFIG_COMPACTION // TOT0Ro >> 설정 됨.
 	init_waitqueue_head(&pgdat->kcompactd_wait);
 #endif
 	pgdat_page_ext_init(pgdat);
@@ -6474,6 +6475,7 @@ static void __init find_zone_movable_pfns_for_nodes(void)
 				continue;
 			}
 
+			// TOT0Ro >> movable의 시작 pfn 갱신
 			zone_movable_pfn[nid] = zone_movable_pfn[nid] ?
 				min(usable_startpfn, zone_movable_pfn[nid]) :
 				usable_startpfn;
@@ -6497,6 +6499,9 @@ static void __init find_zone_movable_pfns_for_nodes(void)
 	// kernelcore = kernelcore
 	// else
 	// kernelcore = totalpages - movablecore
+	// TOT0Ro >> 요청한 kernelcore는 무조건 매핑되고.
+	// totalpages에서 요청한 movablecore를
+	// 빼도 남는 공간이 있느면 kernelcore로 사용.
 	if (required_movablecore) {
 		unsigned long corepages;
 

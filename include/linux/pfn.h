@@ -15,6 +15,7 @@ typedef struct {
 } pfn_t;
 #endif
 
+// TOT0Ro >> page 주소(phys)를 pfn으로 변경.
 #define PFN_ALIGN(x)	(((unsigned long)(x) + (PAGE_SIZE - 1)) & PAGE_MASK)
 #define PFN_UP(x)	(((x) + PAGE_SIZE-1) >> PAGE_SHIFT)
 #define PFN_DOWN(x)	((x) >> PAGE_SHIFT)
