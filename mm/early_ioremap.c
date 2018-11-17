@@ -44,6 +44,7 @@ void __init __weak early_ioremap_shutdown(void)
 
 void __init early_ioremap_reset(void)
 {
+    // __weak는 __strong이 없으면 불리는 함수의 지시자(__strong이 있으면 그 함수가 불림)
 	early_ioremap_shutdown();
 	after_paging_init = 1;
 }

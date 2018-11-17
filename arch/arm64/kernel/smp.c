@@ -503,6 +503,7 @@ static bool __init is_mpidr_duplicate(unsigned int cpu, u64 hwid)
  * Initialize cpu operations for a logical cpu and
  * set it in the possible mask on success
  */
+// TOT0Ro >> cpu operations를 설정하고(enable_method) cpu_init을 호출
 static int __init smp_cpu_setup(int cpu)
 {
 	if (cpu_read_ops(cpu))

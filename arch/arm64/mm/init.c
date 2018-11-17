@@ -233,10 +233,12 @@ static phys_addr_t __init max_zone_dma_phys(void)
 
 #ifdef CONFIG_NUMA // IMRT >> yes!
 
+// IMRT >> 모든 메모리의 노드 및 존 정보 초기화
 static void __init zone_sizes_init(unsigned long min, unsigned long max)
 {
 	unsigned long max_zone_pfns[MAX_NR_ZONES]  = {0};
 
+    // IMRT ZONE_DMA32 = 4GB pfn, ZONE_NORMAL = max_pfn
 	if (IS_ENABLED(CONFIG_ZONE_DMA32))
 		max_zone_pfns[ZONE_DMA32] = PFN_DOWN(max_zone_dma_phys());
 	// IMRT >> DMA32 빼고 나머지 전부 NORMAL
@@ -292,6 +294,7 @@ static void __init zone_sizes_init(unsigned long min, unsigned long max)
 #ifdef CONFIG_HAVE_ARCH_PFN_VALID
 int pfn_valid(unsigned long pfn)
 {
+    // IMRT >> pfn은 memblock에 있으며, mapping 되어 있어야 valid하다고 판단
 	return memblock_is_map_memory(pfn << PAGE_SHIFT);
 }
 EXPORT_SYMBOL(pfn_valid);
@@ -536,7 +539,7 @@ void __init bootmem_init(void)
 
 	// IMRT : mem_section(mem_map) 초기화
 	sparse_init();
-	// IMRT : zone 초기화 18.10.27 할 차례
+	// IMRT : zone 및 node(pgdat) 초기화
 	zone_sizes_init(min, max);
 
 	memblock_dump_all();

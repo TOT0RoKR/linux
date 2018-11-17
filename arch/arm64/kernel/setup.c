@@ -218,7 +218,9 @@ static void __init request_standard_resources(void)
 	kernel_data.end     = __pa_symbol(_end - 1);
 
 	for_each_memblock(memory, region) {
-		res = alloc_bootmem_low(sizeof(*res));
+        // IMRT >> struct resource를 최대한 아래의 메모리에서 할당 받으려 함
+		res = alloc_bootmem_low(sizeof(*res)); 
+        // IMRT >> memory region이 mapping 되어 있지 않은 경우 reserved, mapping이 되어 있는 경우 system ram & busy
 		if (memblock_is_nomap(region)) {
 			res->name  = "reserved";
 			res->flags = IORESOURCE_MEM;
@@ -229,8 +231,10 @@ static void __init request_standard_resources(void)
 		res->start = __pfn_to_phys(memblock_region_memory_base_pfn(region));
 		res->end = __pfn_to_phys(memblock_region_memory_end_pfn(region)) - 1;
 
+        // IMRT >> iomem_resource root 노드에 res 노드를 추가한다.
 		request_resource(&iomem_resource, res);
 
+        // IMRT >> 만약 res가 kernel_code/data 범위를 포함하면 res 하위 항목에 자식 node로써 추가
 		if (kernel_code.start >= res->start &&
 		    kernel_code.end <= res->end)
 			request_resource(res, &kernel_code);
@@ -239,6 +243,7 @@ static void __init request_standard_resources(void)
 			request_resource(res, &kernel_data);
 #ifdef CONFIG_KEXEC_CORE
 		/* Userspace will find "Crash kernel" region in /proc/iomem. */
+        // IMRT >> Kernel crash시, dump를 저장을 하는 영역
 		if (crashk_res.end && crashk_res.start >= res->start &&
 		    crashk_res.end <= res->end)
 			request_resource(res, &crashk_res);
@@ -321,19 +326,26 @@ void __init setup_arch(char **cmdline_p)
 	if (acpi_disabled)
 		unflatten_device_tree();
 
+    // IMRT >> 노드 등의 메모리 레이아웃 초기화
 	bootmem_init();
 
+    // IMRT >> Kernel Address Sanitizer; Memory out of bounds, use after free error 잡기 위함
 	kasan_init();
 
+    // IMRT >> 메모리에 대한 resource 구조체를 tree 형태로 초기화
 	request_standard_resources();
 
+    // IMRT >> after_paging_init == 1로 세팅
 	early_ioremap_reset();
 
+    // IMRT >> acpi_disabed = 1
 	if (acpi_disabled)
+        // IMRT >> PSCI 드라이버 초기화(CPU 상태관리 기능)
 		psci_dt_init();
 	else
 		psci_acpi_init();
 
+    // IMRT >> 0번 CPU가 해야 할 인터페이스들을 배열에 넣어준다.
 	cpu_read_bootcpu_ops();
 	smp_init_cpus();
 	smp_build_mpidr_hash();
