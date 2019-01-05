@@ -519,16 +519,16 @@ asmlinkage __visible void __init start_kernel(void)
 	char *command_line;
 	char *after_dashes;
 
-// IMRT : thread_union 내에서, 커널 스택에 의해 thread_info가 corrupt되지 않도록, init_tack 내에 stack끝에 magic number를 설정. 
+	// IMRT : thread_union 내에서, 커널 스택에 의해 thread_info가 corrupt되지 않도록, init_tack 내에 stack끝에 magic number를 설정. 
 	set_task_stack_end_magic(&init_task);
-// IMRT : 현재 구동중인 물리적인 core number를 logical core num 0로 세팅.
+	// IMRT : 현재 구동중인 물리적인 core number를 logical core num 0로 세팅.
 	smp_setup_processor_id();
-// IMRT : DEBUG 생략.
+	// IMRT : DEBUG 생략.
 	debug_objects_early_init();
-// IMRT : cgroup 정보를 init한다.
+	// IMRT : cgroup 정보를 init한다.
 	cgroup_init_early();
-// IMRT : 현재 코어의 인터럽트 수신을 disable로 바꾸어 펜딩시켜,
-// 현재 실행 중인 컨텍스트를 보호하며, start_kernel의 후반부에 다시 enable한다. 
+	// IMRT : 현재 코어의 인터럽트 수신을 disable로 바꾸어 펜딩시켜,
+	// 현재 실행 중인 컨텍스트를 보호하며, start_kernel의 후반부에 다시 enable한다. 
 	local_irq_disable();
 	early_boot_irqs_disabled = true;
 
@@ -537,27 +537,38 @@ asmlinkage __visible void __init start_kernel(void)
 	 * enable them.
 	 */
 
-// boot_cpu_init : 현재 cpu의 online|active|present|possible 상태를 set한다.
+	// boot_cpu_init : 현재 cpu의 online|active|present|possible 상태를 set한다.
 	boot_cpu_init();
-// page_address_init : CONFIG_HIGHMEM이 설정되어 있지 않을 경우, 아무 동작도 하지 않는다.
-//(arm64에서는 설정되지 않는다)
+	// page_address_init : CONFIG_HIGHMEM이 설정되어 있지 않을 경우, 아무 동작도 하지 않는다.
+	//(arm64에서는 설정되지 않는다)
 	page_address_init();
-// linux_banner 출력
+	// linux_banner 출력
 	pr_notice("%s", linux_banner);
-
+	// IMRT >> 2018/11/17 끝 
 	setup_arch(&command_line);
 	/*
 	 * Set up the the initial canary and entropy after arch
 	 * and after adding latent and command line entropy.
 	 */
+	// IMRT >> /dev/random의 entropy(불확실성)을 증가시킨다.
 	add_latent_entropy();
 	add_device_randomness(command_line, strlen(command_line));
+	// IMRT >> canary 값을 초기화함
+	// canary: 일반적으로 버퍼 오버플로 보호는 스택에 할당된 데이터를 체계화해서 카나리 값을 포함하는데, 
+	// 이것은 스택 버퍼 오버플로에 의해 파괴될 시에 메모리에서 오버플로우 되기 전의 버퍼를 보여준다
 	boot_init_stack_canary();
+	// IMRT >> CPU Mask를 초기화(clear)한다.
 	mm_init_cpumask(&init_mm);
+	// IMRT >> boot_command_line: 부트로더에서 넘어온 값 + DTB에서 읽어온 값 
+	// command_line는 현재(arm64) 같지만 architecture에 따라 다를수있다.
 	setup_command_line(command_line);
+	// IMRT >> cpu id의 갯수(nr_cpu_ids)를 설정함
 	setup_nr_cpu_ids();
+	// IMRT >> percpu area관련 변수를 초기화하고, offset을 저장한다. 
 	setup_per_cpu_areas();
+	// IMRT >> bootcpu의 process id를 불러와 CPUHP_ONLINE으로 state를 설정한다.
 	boot_cpu_state_init();
+	// IMRT >>
 	smp_prepare_boot_cpu();	/* arch-specific boot-cpu hooks */
 
 	build_all_zonelists(NULL);

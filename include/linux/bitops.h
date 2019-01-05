@@ -12,6 +12,8 @@
 #define BIT_ULL_WORD(nr)	((nr) / BITS_PER_LONG_LONG)
 #define BITS_PER_BYTE		8
 // TOT0Ro >> nr 비트를 표현하기 위한 long의 개수
+// IMRT >> #define __KERNEL_DIV_ROUND_UP(n, d) (((4) + (64) - 1) / (64))
+// nr 개수 만큼의 bit를 표현 하기 위한 long의 개수
 #define BITS_TO_LONGS(nr)	DIV_ROUND_UP(nr, BITS_PER_BYTE * sizeof(long))
 #endif
 

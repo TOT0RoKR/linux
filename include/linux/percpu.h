@@ -38,6 +38,7 @@
  * also has to be a multiple of PCPU_BITMAP_BLOCK_SIZE to ensure full blocks.
  */
 #define PCPU_BITMAP_BLOCK_SIZE		PAGE_SIZE
+// IMRT >> 1k
 #define PCPU_BITMAP_BLOCK_BITS		(PCPU_BITMAP_BLOCK_SIZE >>	\
 					 PCPU_MIN_ALLOC_SHIFT)
 

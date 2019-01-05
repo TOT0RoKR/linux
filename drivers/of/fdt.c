@@ -1111,6 +1111,8 @@ int __init early_init_dt_scan_chosen(unsigned long node, const char *uname,
 	 * managed to set the command line, unless CONFIG_CMDLINE_FORCE
 	 * is set in which case we override whatever was found earlier.
 	 */
+	// "CONFIG_CMDLINE_EXTEND"로 설정된 경우, 현재 boot_command_line에 fdt에서 읽어온 값을 붙인다.
+	// "CONFIG_CMDLINE_FORCE"로 설정된 경우, 현재 boot_command_line에 fdt에서 읽어온 값을 덮어쓴다.
 #ifdef CONFIG_CMDLINE
 #if defined(CONFIG_CMDLINE_EXTEND)
 	strlcat(data, " ", COMMAND_LINE_SIZE);

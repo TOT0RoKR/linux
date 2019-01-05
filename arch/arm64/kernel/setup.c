@@ -159,13 +159,18 @@ static void __init smp_build_mpidr_hash(void)
 	 * of CPUs that is not an exact power of 2 and their bit
 	 * representation might contain holes, eg MPIDR_EL1[7:0] = {0x2, 0x80}.
 	 */
+	// IMRT >> MPIDR register에서 불필요한 reserved bits를 없애는 과정을 hash라고 함
+	// 예) 1011 [0]1011[0]  ==> 1011/1011
+	// hash(mpidr) { return mpidr >> shift_aff[0] | mpidr >> shift_aff[1] | mpidr >> shift_aff[2] } 
 	mpidr_hash.shift_aff[0] = MPIDR_LEVEL_SHIFT(0) + fs[0];
 	mpidr_hash.shift_aff[1] = MPIDR_LEVEL_SHIFT(1) + fs[1] - bits[0];
 	mpidr_hash.shift_aff[2] = MPIDR_LEVEL_SHIFT(2) + fs[2] -
 						(bits[1] + bits[0]);
 	mpidr_hash.shift_aff[3] = MPIDR_LEVEL_SHIFT(3) +
 				  fs[3] - (bits[2] + bits[1] + bits[0]);
+	// IMRT >> mask: boot cpu와 비교 시 logical cpu id가 변화되는 비트
 	mpidr_hash.mask = mask;
+	// IMRT >> bits: valid한 range 의 합
 	mpidr_hash.bits = bits[3] + bits[2] + bits[1] + bits[0];
 	pr_debug("MPIDR hash: aff0[%u] aff1[%u] aff2[%u] aff3[%u] mask[%#llx] bits[%u]\n",
 		mpidr_hash.shift_aff[0],
@@ -343,7 +348,7 @@ void __init setup_arch(char **cmdline_p)
 	else
 		psci_acpi_init();
 
-    // IMRT >> 0번 CPU가 해야 할 인터페이스들을 배열에 넣어준다.
+    // IMRT >> 0번 CPU가 해야 할 기능들을 인터페이스에 넣어준다.
 	cpu_read_bootcpu_ops();
 	smp_init_cpus();
 	smp_build_mpidr_hash();
@@ -354,6 +359,7 @@ void __init setup_arch(char **cmdline_p)
 	 * faults in case uaccess_enable() is inadvertently called by the init
 	 * thread.
 	 */
+	// IMRT >> ttbr0를 disable함
 	init_task.thread_info.ttbr0 = __pa_symbol(empty_zero_page);
 #endif
 

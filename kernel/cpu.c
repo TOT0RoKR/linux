@@ -2028,6 +2028,7 @@ void __init boot_cpu_init(void)
 /*
  * Must be called _AFTER_ setting up the per_cpu areas
  */
+// IMRT >> bootcpu의 process id를 불러와 CPUHP_ONLINE으로 state를 설정한다.
 void __init boot_cpu_state_init(void)
 {
 	per_cpu_ptr(&cpuhp_state, smp_processor_id())->state = CPUHP_ONLINE;
