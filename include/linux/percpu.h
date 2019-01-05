@@ -63,6 +63,7 @@
  * intelligent way to determine this would be nice.
  */
 #if BITS_PER_LONG > 32
+// TOT0Ro >> 이것
 #define PERCPU_DYNAMIC_RESERVE		(28 << 10)
 #else
 #define PERCPU_DYNAMIC_RESERVE		(20 << 10)

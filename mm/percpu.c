@@ -2221,6 +2221,7 @@ early_param("percpu_alloc", percpu_alloc_setup);
  * Build it if needed by the arch config or the generic setup is going
  * to be used.
  */
+// TOT0Ro >> 두 config yes 
 #if defined(CONFIG_NEED_PER_CPU_EMBED_FIRST_CHUNK) || \
 	!defined(CONFIG_HAVE_SETUP_PER_CPU_AREA)
 #define BUILD_EMBED_FIRST_CHUNK
@@ -2390,6 +2391,7 @@ static struct pcpu_alloc_info * __init pcpu_build_alloc_info(
 }
 #endif /* BUILD_EMBED_FIRST_CHUNK || BUILD_PAGE_FIRST_CHUNK */
 
+// TOT0Ro >> true
 #if defined(BUILD_EMBED_FIRST_CHUNK)
 /**
  * pcpu_embed_first_chunk - embed the first percpu chunk into bootmem
@@ -2475,6 +2477,7 @@ int __init pcpu_embed_first_chunk(size_t reserved_size, size_t dyn_size,
 		if (ptr > areas[highest_group])
 			highest_group = group;
 	}
+	// TOT0Ro >> first group의 처음부터 highest group의 끝.
 	max_distance = areas[highest_group] - base;
 	max_distance += ai->unit_size * ai->groups[highest_group].nr_units;
 
@@ -2511,6 +2514,7 @@ int __init pcpu_embed_first_chunk(size_t reserved_size, size_t dyn_size,
 	}
 
 	/* base address is now known, determine group base offsets */
+	// TOT0Ro >> group별 base offset 구하기.
 	for (group = 0; group < ai->nr_groups; group++) {
 		ai->groups[group].base_offset = areas[group] - base;
 	}
