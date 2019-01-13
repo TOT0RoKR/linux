@@ -71,6 +71,7 @@
  * Additional babbling in: Documentation/static-keys.txt
  */
 
+// TOT0Ro >> 정의 안됨.
 #if defined(CC_HAVE_ASM_GOTO) && defined(CONFIG_JUMP_LABEL)
 # define HAVE_JUMP_LABEL
 #endif
@@ -194,6 +195,7 @@ static inline int static_key_count(struct static_key *key)
 	return atomic_read(&key->enabled);
 }
 
+// TOT0Ro >> 이것임. 기본 config로는 jump_label_init 하지 않음.
 static __always_inline void jump_label_init(void)
 {
 	static_key_initialized = true;

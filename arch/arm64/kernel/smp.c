@@ -443,13 +443,17 @@ void __init smp_prepare_boot_cpu(void)
 	// IMRT >> boot cpu의 percpu offset을 설정한다.
 	// 	percpu offset은 TPIDR 레지스터에 저장된다.
 	// 	ARMV7이전에는 메모리를 사용하느라 메모리에 대한 접근이 2번 필요하여 느렸었고,
-	// 	이를 극복하고자, 원래의 목적으로 사용하지 않는 레지스터인 TPIDRPRW를 사용하여 메모리 접근을 한번으로 줄이기 위해 사용한다.
+	// 	이를 극복하고자, 원래의 목적으로 사용하지 않는 레지스터인 TPIDRPRW를 사용하여
+	// 	메모리 접근을 한번으로 줄이기 위해 사용한다.
 	set_my_cpu_offset(per_cpu_offset(smp_processor_id()));
 	/*
 	 * Initialise the static keys early as they may be enabled by the
 	 * cpufeature code.
 	 */
-	// IMRT >> Kernel과 mudule에서 조건문의 branch 미스율을 낮추어 성능을 향상시키기 위한 방법으로 static 키를 사용한 jump label API를 사용하는데, 커널에서 이런 jump label 코드들을 모두 찾아 초기화한다.
+	// IMRT >> Kernel과 mudule에서 조건문의 branch 미스율을 낮추어 성능을 향상시키기
+	// 위한 방법으로 static 키를 사용한 jump label API를 사용하는데, 커널에서 이런
+	// jump label 코드들을 모두 찾아 초기화한다.
+	// TOT0Ro >> ARM64 default config에서는 init 안함.
 	jump_label_init();
 	// IMRT >> ------------------- 1222
 	cpuinfo_store_boot_cpu();

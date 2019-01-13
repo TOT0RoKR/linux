@@ -382,6 +382,8 @@ static void __jump_label_update(struct static_key *key,
 
 void __init jump_label_init(void)
 {
+	// TOT0Ro >> __init과 같은 매크로 태그를 이용에 컴파일 타임에 수집.
+	// jump_table을 생성.
 	struct jump_entry *iter_start = __start___jump_table;
 	struct jump_entry *iter_stop = __stop___jump_table;
 	struct static_key *key = NULL;
@@ -401,20 +403,25 @@ void __init jump_label_init(void)
 
 	cpus_read_lock();
 	jump_label_lock();
+	// TOT0Ro >> Head 정렬을 수행한다.
 	jump_label_sort_entries(iter_start, iter_stop);
 
 	for (iter = iter_start; iter < iter_stop; iter++) {
 		struct static_key *iterk;
 
 		/* rewrite NOPs */
+		// TOT0Ro >> jump label 주소에 NOP 명령에 대한 재정의. A64는 기본으로 NOP을 사용하고
+		// 필요시 arch~~~transform 함수로 branch로 변경. (근데 여기서는 안하네?)
 		if (jump_label_type(iter) == JUMP_LABEL_NOP)
 			arch_jump_label_transform_static(iter, JUMP_LABEL_NOP);
 
+		// TOT0Ro >> 최하위 비트는 0이면 nop, 1이면 branch를 의미. 날려버리고 key만 꺼냄.
 		iterk = jump_entry_key(iter);
 		if (iterk == key)
 			continue;
 
 		key = iterk;
+		// TOT0Ro >> branch냐 nop이냐는 설정 했으니(언제?) key만 다시 iter에 저장.
 		static_key_set_entries(key, iter);
 	}
 	static_key_initialized = true;
