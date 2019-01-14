@@ -382,8 +382,6 @@ static void __jump_label_update(struct static_key *key,
 
 void __init jump_label_init(void)
 {
-	// 병렬 처리를 위해 likely unlikely 파이프 라이닝 할 때 예측을 통해 빠르게 진행한다.
-	// likely unlikely label을 지정해 주는 func
 	struct jump_entry *iter_start = __start___jump_table;
 	struct jump_entry *iter_stop = __stop___jump_table;
 	struct static_key *key = NULL;
@@ -403,7 +401,6 @@ void __init jump_label_init(void)
 
 	cpus_read_lock();
 	jump_label_lock();
-	// IMRT >> heap sort로 정렬함으로써 반복된 키를 중복하여 접근하지 않을 수 있음 
 	jump_label_sort_entries(iter_start, iter_stop);
 
 	for (iter = iter_start; iter < iter_stop; iter++) {
@@ -414,11 +411,10 @@ void __init jump_label_init(void)
 			arch_jump_label_transform_static(iter, JUMP_LABEL_NOP);
 
 		iterk = jump_entry_key(iter);
-		// IMRT >> key 주소 값 중복 확인
 		if (iterk == key)
 			continue;
+
 		key = iterk;
-		// IMRT >> key가 entry 주소를 가리키도록 함
 		static_key_set_entries(key, iter);
 	}
 	static_key_initialized = true;

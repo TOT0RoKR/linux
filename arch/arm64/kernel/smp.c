@@ -444,7 +444,6 @@ void __init smp_prepare_boot_cpu(void)
 	// 	percpu offset은 TPIDR 레지스터에 저장된다.
 	// 	ARMV7이전에는 메모리를 사용하느라 메모리에 대한 접근이 2번 필요하여 느렸었고,
 	// 	이를 극복하고자, 원래의 목적으로 사용하지 않는 레지스터인 TPIDRPRW를 사용하여 메모리 접근을 한번으로 줄이기 위해 사용한다.
-	// __per_cpu_offset[] : per-cpu 데이터를 접근하려면 cpu 번호마다 지정된 offset 값을 더해야 하는데 그 offset 값 들이 저장된 전역 변수 배열이다.
 	set_my_cpu_offset(per_cpu_offset(smp_processor_id()));
 	/*
 	 * Initialise the static keys early as they may be enabled by the
