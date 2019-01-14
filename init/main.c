@@ -568,7 +568,7 @@ asmlinkage __visible void __init start_kernel(void)
 	setup_per_cpu_areas();
 	// IMRT >> bootcpu의 process id를 불러와 CPUHP_ONLINE으로 state를 설정한다.
 	boot_cpu_state_init();
-	// IMRT >> SMP에서 boot cpu를 사용하기 위한 준비
+	// IMRT >>
 	smp_prepare_boot_cpu();	/* arch-specific boot-cpu hooks */
 
 	build_all_zonelists(NULL);

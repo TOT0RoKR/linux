@@ -418,9 +418,8 @@ void __init jump_label_init(void)
 		if (iterk == key)
 			continue;
 		key = iterk;
-		// IMRT >> key가 iter(entry 주소)를 가리키도록 함 
+		// IMRT >> key가 entry 주소를 가리키도록 함
 		static_key_set_entries(key, iter);
-		// iter.key = key, key.entries = iter 이유는 아직 모름 
 	}
 	static_key_initialized = true;
 	jump_label_unlock();

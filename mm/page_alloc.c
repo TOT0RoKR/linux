@@ -5101,7 +5101,7 @@ static void build_thisnode_zonelists(pg_data_t *pgdat)
  * exhausted, but results in overflowing to remote node while memory
  * may still exist in local DMA zone.
  */
-// IMRT >> 1월 19일부터 시작 =======================
+
 static void build_zonelists(pg_data_t *pgdat)
 {
 	static int node_order[MAX_NUMNODES];
@@ -5293,11 +5293,9 @@ build_all_zonelists_init(void)
  */
 void __ref build_all_zonelists(pg_data_t *pgdat)
 {
-	// IMRT >> 부팅 시에 호출이 되는 경우 전체 노드에 대해 zonelist를 구성하고 현재 cpu에 대해 모든 노드의 메모리를 access 할 수 있도록 설정
 	if (system_state == SYSTEM_BOOTING) {
 		build_all_zonelists_init();
 	} else {
-		// IMRT >> 운영 중에 핸들러에 의해 호출(hotplug memory)되는 경우 전체 cpu를 멈추고 zone에 대한 boot pageset 테이블 구성 및 전체 노드에 대해 zonelist를 다시 구성
 		__build_all_zonelists(pgdat);
 		/* cpuset refresh routine should be here */
 	}
