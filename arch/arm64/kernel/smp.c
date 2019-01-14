@@ -443,22 +443,31 @@ void __init smp_prepare_boot_cpu(void)
 	// IMRT >> boot cpu의 percpu offset을 설정한다.
 	// 	percpu offset은 TPIDR 레지스터에 저장된다.
 	// 	ARMV7이전에는 메모리를 사용하느라 메모리에 대한 접근이 2번 필요하여 느렸었고,
-	// 	이를 극복하고자, 원래의 목적으로 사용하지 않는 레지스터인 TPIDRPRW를 사용하여 메모리 접근을 한번으로 줄이기 위해 사용한다.
+	// 	이를 극복하고자, 원래의 목적으로 사용하지 않는 레지스터인 TPIDRPRW를
+	// 	사용하여 메모리 접근을 한번으로 줄이기 위해 사용한다.
+	// 	__per_cpu_offset[] : percpu 전역 offset
 	set_my_cpu_offset(per_cpu_offset(smp_processor_id()));
 	/*
 	 * Initialise the static keys early as they may be enabled by the
 	 * cpufeature code.
 	 */
-	// IMRT >> Kernel과 mudule에서 조건문의 branch 미스율을 낮추어 성능을 향상시키기 위한 방법으로 static 키를 사용한 jump label API를 사용하는데, 커널에서 이런 jump label 코드들을 모두 찾아 초기화한다.
+	// IMRT >> Kernel과 mudule에서 조건문의 branch 미스율을 낮추어 성능을 향상시키기
+	// 위한 방법으로 static 키를 사용한 jump label API를 사용하는데, 커널에서 이런 
+	// jump label 코드들을 모두 찾아 초기화한다.
 	jump_label_init();
-	// IMRT >> ------------------- 1222
+	// IMRT >> logical cpu 0에서 읽어온 cpu 정보를 per_cpu로 할달되어있는
+	// cpuinfo_arm64 구조체에 설정
 	cpuinfo_store_boot_cpu();
+	// IMRT >> 현재 Exception Level이 hypervisor mode (EL2)인지 여부를
+	// boot_cpu_hyp_mode에 넣는다.
 	save_boot_cpu_run_el();
 	/*
 	 * Run the errata work around checks on the boot CPU, once we have
 	 * initialised the cpu feature infrastructure from
 	 * cpuinfo_store_boot_cpu() above.
 	 */
+	// IMRT >> errata: 가능한 에러상황을 회피할 수 있도록 오류 히스토리를 모아둠.
+	// errata를 업데이트함
 	update_cpu_errata_workarounds();
 }
 
