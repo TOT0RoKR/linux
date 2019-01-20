@@ -1,5 +1,9 @@
-rm tags
-rm cscope.*
+if [ -f "tags" ]; then
+	rm tags
+fi
+if [ -f "cscope.*" ]; then
+	rm cscope.*
+fi
 
 ctags -aR --extra=f *
 

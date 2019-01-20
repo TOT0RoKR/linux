@@ -4929,6 +4929,7 @@ static int build_zonerefs_node(pg_data_t *pgdat, struct zoneref *zonerefs)
 	enum zone_type zone_type = MAX_NR_ZONES;
 	int nr_zones = 0;
 
+	// IMRT >> pgdat의 zone 별로 역순으로 추가.
 	do {
 		zone_type--;
 		zone = pgdat->node_zones + zone_type;
@@ -5010,36 +5011,46 @@ static int node_load[MAX_NUMNODES];
  */
 static int find_next_best_node(int node, nodemask_t *used_node_mask)
 {
+	// IMRT >> val = distance weight.
+	// 값이 작을 수록 best node임.
 	int n, val;
 	int min_val = INT_MAX;
 	int best_node = NUMA_NO_NODE;
 	const struct cpumask *tmp = cpumask_of_node(0);
 
 	/* Use the local node if we haven't already */
+	// IMRT >> Local node가 node_order에 추가되어있지 않음
 	if (!node_isset(node, *used_node_mask)) {
 		node_set(node, *used_node_mask);
 		return node;
 	}
 
+	// IMRT >> N_MEMORY state가 설정된 nid를 n으로 하여 반복
 	for_each_node_state(n, N_MEMORY) {
 
 		/* Don't want a node to appear more than once */
+		// IMRT >> 해당 node가 이미 node_order에 추가했는지 확인.
 		if (node_isset(n, *used_node_mask))
 			continue;
 
 		/* Use the distance array to find the distance */
+		// IMRT >> Device Tree에서 읽은 Node 간의 거리 값을 가져온다.
 		val = node_distance(node, n);
 
 		/* Penalize nodes under us ("prefer the next node") */
+		// IMRT >> 대상 노드보다 낮은 노드 번호를 가지면 val 값을 증가시킨다.
 		val += (n < node);
 
 		/* Give preference to headless and unused nodes */
+		// IMRT >> CPU가 붙어있는 메모리는 val 값을 증가시킨다.
 		tmp = cpumask_of_node(n);
 		if (!cpumask_empty(tmp))
 			val += PENALTY_FOR_NODE_WITH_CPUS;
 
 		/* Slight preference for less loaded node */
 		val *= (MAX_NODE_LOAD*MAX_NUMNODES);
+		// IMRT >> 이전에 load가 있었던 node는 가중치를 주어서
+		// val 값을 증가시킨다.
 		val += node_load[n];
 
 		if (val < min_val) {
@@ -5066,8 +5077,11 @@ static void build_zonelists_in_node_order(pg_data_t *pgdat, int *node_order,
 	struct zoneref *zonerefs;
 	int i;
 
+	// IMRT >> pgdat의 fallback zonelists
 	zonerefs = pgdat->node_zonelists[ZONELIST_FALLBACK]._zonerefs;
 
+	// IMRT >> best fallback node순으로 정렬된 node_order의
+	// 순서대로 모든 zone을 fallback zonelist에 추가.
 	for (i = 0; i < nr_nodes; i++) {
 		int nr_zones;
 
@@ -5076,6 +5090,7 @@ static void build_zonelists_in_node_order(pg_data_t *pgdat, int *node_order,
 		nr_zones = build_zonerefs_node(node, zonerefs);
 		zonerefs += nr_zones;
 	}
+	// IMRT >> 마지막을 의미.
 	zonerefs->zone = NULL;
 	zonerefs->zone_idx = 0;
 }
@@ -5104,8 +5119,10 @@ static void build_thisnode_zonelists(pg_data_t *pgdat)
 
 static void build_zonelists(pg_data_t *pgdat)
 {
+	// IMRT >> node_order : fallback할 best node 순서로 정렬된 node_id list
 	static int node_order[MAX_NUMNODES];
 	int node, load, nr_nodes = 0;
+	// IMRT >> node_order에 추가했는지 확인
 	nodemask_t used_mask;
 	int local_node, prev_node;
 
@@ -5122,6 +5139,10 @@ static void build_zonelists(pg_data_t *pgdat)
 		 * So adding penalty to the first node in same
 		 * distance group to make it round-robin.
 		 */
+		// IMRT >> node distance를 구해서 load를 정한다.
+		// 이전에 설정한 node와 distance가 같은 node는
+		// load값을 0으로 하여, load값이 0인 node는
+		// 다음 find_next_best_node에서 우선 순위를 높인다.
 		if (node_distance(local_node, node) !=
 		    node_distance(local_node, prev_node))
 			node_load[node] = load;
@@ -5131,7 +5152,9 @@ static void build_zonelists(pg_data_t *pgdat)
 		load--;
 	}
 
+	// fallback으로 사용할 zonelist 생성
 	build_zonelists_in_node_order(pgdat, node_order, nr_nodes);
+	// nofallback으로 사용할 zonelist 생성, (zonelist를 생성하는 타겟 자신)
 	build_thisnode_zonelists(pgdat);
 }
 
@@ -5235,12 +5258,14 @@ static void __build_all_zonelists(void *data)
 	if (self && !node_online(self->node_id)) {
 		build_zonelists(self);
 	} else {
+		// IMRT >> 모든 node에 대해서 zonelist를 구성.
 		for_each_online_node(nid) {
 			pg_data_t *pgdat = NODE_DATA(nid);
 
 			build_zonelists(pgdat);
 		}
 
+// IMRT >> no
 #ifdef CONFIG_HAVE_MEMORYLESS_NODES
 		/*
 		 * We now know the "local memory node" for each node--
@@ -5281,7 +5306,10 @@ build_all_zonelists_init(void)
 	for_each_possible_cpu(cpu)
 		setup_pageset(&per_cpu(boot_pageset, cpu), 0);
 
+	// IMRT >> 모든 zonelist 확인
 	mminit_verify_zonelist();
+	// IMRT >> st_el0 레지스터가 현재 태스크를 가리키고있고(?) 
+	// 해당 태스크가 모든 node들을 allow하도록 함..(?)
 	cpuset_init_current_mems_allowed();
 }
 
@@ -5293,12 +5321,18 @@ build_all_zonelists_init(void)
  */
 void __ref build_all_zonelists(pg_data_t *pgdat)
 {
+	// IMRT >> zone ordered zonelist와 node ordered zonelist 중 선택이 가능
+	// 했었으나, zone ordered zonelist는 삭제됨.
+	// 따라서 set_zonelist_order()와 같은 order를 설정하고 관리하는
+	// 코드나, 데이터가 삭제됨.
 	if (system_state == SYSTEM_BOOTING) {
 		build_all_zonelists_init();
 	} else {
 		__build_all_zonelists(pgdat);
 		/* cpuset refresh routine should be here */
 	}
+	// IMRT >> free page의 개수가 high watermark보다 클 경우
+	// 그 개수를 return한다.
 	vm_total_pages = nr_free_pagecache_pages();
 	/*
 	 * Disable grouping by mobility if the number of pages in the
@@ -5307,6 +5341,9 @@ void __ref build_all_zonelists(pg_data_t *pgdat)
 	 * made on memory-hotadd so a system can start with mobility
 	 * disabled and enable it later
 	 */
+	// IMRT >> vm_total_pages가 MIGRATE_TYPES 개수의 pageblock 보다 크기가
+	// 작으면 항상 unmovable 타입을 사용하여 mobility 기능을 제한한다.
+	// 추후 버디시스템에서 살펴보자.
 	if (vm_total_pages < (pageblock_nr_pages * MIGRATE_TYPES))
 		page_group_by_mobility_disabled = 1;
 	else

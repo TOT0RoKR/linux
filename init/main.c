@@ -570,8 +570,11 @@ asmlinkage __visible void __init start_kernel(void)
 	boot_cpu_state_init();
 	// IMRT >> SMP에서 bootcpu를 사용하기 위한 준비
 	smp_prepare_boot_cpu();	/* arch-specific boot-cpu hooks */
-
+	
+	// IMRT >> zonelist는 할당 요청한 zone의 page가 부족할 때, fallback 하기 위한 zone의
+	// list이다. 이 zonelist는 각 node마다 존재하고, 각 node 별 zonelist를 초기화한다. 
 	build_all_zonelists(NULL);
+	// 2019.01.19
 	page_alloc_init();
 
 	pr_notice("Kernel command line: %s\n", boot_command_line);

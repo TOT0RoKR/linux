@@ -382,6 +382,7 @@ static void __jump_label_update(struct static_key *key,
 
 void __init jump_label_init(void)
 {
+	// IMRT >> jump label을 통해서 table을 이미 만들었음 __init 처럼.
 	struct jump_entry *iter_start = __start___jump_table;
 	struct jump_entry *iter_stop = __stop___jump_table;
 	struct static_key *key = NULL;
@@ -401,20 +402,26 @@ void __init jump_label_init(void)
 
 	cpus_read_lock();
 	jump_label_lock();
+	// IMRT >> heap sort (key값으로)
 	jump_label_sort_entries(iter_start, iter_stop);
 
 	for (iter = iter_start; iter < iter_stop; iter++) {
 		struct static_key *iterk;
 
 		/* rewrite NOPs */
+		// IMRT >> LSB가 NOP인지 SMP인지 저장되어있고(iter.key)
+		// 해당 비트가 NOP이면 NOP로 분기코드를 재설정.
 		if (jump_label_type(iter) == JUMP_LABEL_NOP)
 			arch_jump_label_transform_static(iter, JUMP_LABEL_NOP);
 
+		// IMRT >> jump_label_type인 LSB를 제거, key만 꺼냄.
 		iterk = jump_entry_key(iter);
+		// IMRT >> 중복확인, 반복안함.
 		if (iterk == key)
 			continue;
-
 		key = iterk;
+
+		// IMRT >> key가 다시 iter를 가르키게 만듦.
 		static_key_set_entries(key, iter);
 	}
 	static_key_initialized = true;
