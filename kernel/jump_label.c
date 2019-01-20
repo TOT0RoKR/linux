@@ -419,8 +419,8 @@ void __init jump_label_init(void)
 		// IMRT >> 중복확인, 반복안함.
 		if (iterk == key)
 			continue;
-		key = iterk;
 
+		key = iterk;
 		// IMRT >> key가 다시 iter를 가르키게 만듦.
 		static_key_set_entries(key, iter);
 	}
