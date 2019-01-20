@@ -335,6 +335,51 @@ void __init numa_set_distance(int from, int to, int distance)
 /**
  * Return NUMA distance @from to @to
  */
+/*
+ * IMRT >> https://www.kernel.org/doc/Documentation/devicetree/bindings/numa.txt
+ * Example:
+ *       4 nodes connected in mesh/ring topology as below,
+ * 
+ *             0_______20______1
+ *             |               |
+ *             |               |
+ *             20             20
+ *             |               |
+ *             |               |
+ *             |_______________|
+ *             3       20      2
+ * 
+ *       if relative distance for each hop is 20,
+ *       then internode distance would be,
+ *             0 -> 1 = 20
+ *             1 -> 2 = 20
+ *             2 -> 3 = 20
+ *             3 -> 0 = 20
+ *             0 -> 2 = 40
+ *             1 -> 3 = 40
+ * 
+ *      and dt presentation for this distance matrix is,
+ * 
+ *             distance-map {
+ *                    compatible = "numa-distance-map-v1";
+ *                    distance-matrix = <0 0  10>,
+ *                                  <0 1  20>,
+ *                                  <0 2  40>,
+ *                                  <0 3  20>,
+ *                                  <1 0  20>,
+ *                                  <1 1  10>,
+ *                                  <1 2  20>,
+ *                                  <1 3  40>,
+ *                                  <2 0  40>,
+ *                                  <2 1  20>,
+ *                                  <2 2  10>,
+ *                                  <2 3  20>,
+ *                                  <3 0  20>,
+ *                                  <3 1  40>,
+ *                                  <3 2  20>,
+ *                                  <3 3  10>;
+ *             };
+ */
 int __node_distance(int from, int to)
 {
 	if (from >= numa_distance_cnt || to >= numa_distance_cnt)

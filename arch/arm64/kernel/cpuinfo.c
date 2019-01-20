@@ -373,6 +373,7 @@ void cpuinfo_store_cpu(void)
 
 void __init cpuinfo_store_boot_cpu(void)
 {
+	// IMRT >> 0번 cpu의 per_cpu에 저장된 cpu_data를 info가 가르키도록 함.
 	struct cpuinfo_arm64 *info = &per_cpu(cpu_data, 0);
 	__cpuinfo_store_cpu(info);
 
