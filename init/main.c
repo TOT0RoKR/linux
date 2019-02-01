@@ -290,6 +290,7 @@ static int __init unknown_bootoption(char *param, char *val,
 	repair_env_string(param, val, unused, NULL);
 
 	/* Handle obsolete-style parameters */
+	// IMRT >> 구식-스타일 파라미터의 핸들러 수행.
 	if (obsolete_checksetup(param))
 		return 0;
 
@@ -574,11 +575,17 @@ asmlinkage __visible void __init start_kernel(void)
 	// IMRT >> zonelist는 할당 요청한 zone의 page가 부족할 때, fallback 하기 위한 zone의
 	// list이다. 이 zonelist는 각 node마다 존재하고, 각 node 별 zonelist를 초기화한다. 
 	build_all_zonelists(NULL);
-	// 2019.01.19
+	// IMRT >> per-cpu page allocator, pageset을 공부 후 재 검토.
+	// CPUHP down시 page allocator를 제거하는
+	// callback함수를 등록하는 함수.
+	// 그 callback함수는 page-allocator를 본 후에 분석.
 	page_alloc_init();
 
 	pr_notice("Kernel command line: %s\n", boot_command_line);
+	// IMRT >> setup_arch에서 수행함.
 	parse_early_param();
+	// IMRT >> unknown_bootoption은 arg와 env를 init 하기위해
+	// 배열에 저장.
 	after_dashes = parse_args("Booting kernel",
 				  static_command_line, __start___param,
 				  __stop___param - __start___param,
@@ -587,12 +594,15 @@ asmlinkage __visible void __init start_kernel(void)
 		parse_args("Setting init args", after_dashes, NULL, 0, -1, -1,
 			   NULL, set_init_arg);
 
+	// IMRT >> smp_prepare_boot_cpu에서 수행함.
 	jump_label_init();
 
 	/*
 	 * These use large bootmem allocations and must precede
 	 * kmem_cache_init()
 	 */
+	// IMRT >> cpu가 일정 개수 이상을 초과하게 되면
+	// 더 큰 log buffer를 재할당 해준다.
 	setup_log_buf(0);
 	vfs_caches_init_early();
 	sort_main_extable();
