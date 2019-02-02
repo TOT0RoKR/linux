@@ -29,6 +29,7 @@
  * Returns:
  *	x0 - address of first occurrence of 'c' or 0
  */
+// IMRT >> string에서 문자 검색
 ENTRY(strchr)
 	and	w1, w1, #0xff
 1:	ldrb	w2, [x0], #1

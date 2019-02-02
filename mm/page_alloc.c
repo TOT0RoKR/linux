@@ -5303,6 +5303,10 @@ build_all_zonelists_init(void)
 	 * needs the percpu allocator in order to allocate its pagesets
 	 * (a chicken-egg dilemma).
 	 */
+	// IMRT >> bootpageset은 percpu에 저장되어야 하고,
+	// percpu allocator는 pageset을 필요로 해서
+	// batch를 0으로하여 booting 시점의 pageset을
+	// 일단 만든다. (보충 설명 요함)
 	for_each_possible_cpu(cpu)
 		setup_pageset(&per_cpu(boot_pageset, cpu), 0);
 
@@ -7080,6 +7084,10 @@ void __init page_alloc_init(void)
 {
 	int ret;
 
+	// IMRT >> cpu down되면서 page_allocator가 dead 상태가 될 때,
+	// (per_cpu) page allocator를 제거하면서 페이지를 회수하고 해지하는
+	// callback 함수를 등록한다. (page_alloc_cpu_dead)
+	// per-cpu page frame cache 참고.
 	ret = cpuhp_setup_state_nocalls(CPUHP_PAGE_ALLOC_DEAD,
 					"mm/page_alloc:dead", NULL,
 					page_alloc_cpu_dead);
