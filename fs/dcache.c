@@ -3616,6 +3616,11 @@ static void __init dcache_init_early(void)
 	/* If hashes are distributed across NUMA nodes, defer
 	 * hash allocation until vmalloc space is available.
 	 */
+    // IMRT >> NUMA 64bit인 경우 hashdist는 1로 초기화된다.
+    // (page_alloc.c에 전역으로 선언되어 있으며, extern으로 가져와 사용)
+    // 즉, NUMA 64bit에서는 early 할당하지 않는다.
+    // ARM64 아키텍쳐에서는 vmalloc 공간에 저장하기 위해, vmalloc이 활성화된 이후 hash allocation을 다시 시도한다. (dcache_init)
+    // 참고 : slab의 활성화 이후 vmalloc_init을 수행한다.
 	if (hashdist)
 		return;
 
@@ -3670,9 +3675,14 @@ void __init vfs_caches_init_early(void)
 {
 	int i;
 
+    // IMRT >> in_lookup_hashtable이 hlist_bl(hash list bit lock) 자료구조로 정의되어 있으며, lookup hash table내의 hlist_bl_head들을 초기화한다.
+    // table의 크기는 1024다.
+    // in_lookup_hashtable에 대한 내용은 https://lwn.net/Articles/684089/ 참고 
 	for (i = 0; i < ARRAY_SIZE(in_lookup_hashtable); i++)
 		INIT_HLIST_BL_HEAD(&in_lookup_hashtable[i]);
 
+    // IMRT >> NUMA 64bit에서는 dentry cache와 inode cache를 early 할당받지 않는다.
+    // vmalloc 활성화 이후 vfs_caches_init에서 다시 진행.
 	dcache_init_early();
 	inode_init_early();
 }

@@ -766,6 +766,11 @@ static int bug_handler(struct pt_regs *regs, unsigned int esr)
 }
 
 static struct break_hook bug_break_hook = {
+    /* IMRT >> 
+     * .esr_val = 0xf2000000 | BUG_BRK_IMM의 의미 : 
+     * AArch64 의 BRK instruction 트랩 + BUG_BRK_IMM일 경우 이 bug_handler를 실행한다.
+     * call_break_hook 함수와 ESR_ELx_VAL_BRK64 참고
+     */
 	.esr_val = 0xf2000000 | BUG_BRK_IMM,
 	.esr_mask = 0xffffffff,
 	.fn = bug_handler,
