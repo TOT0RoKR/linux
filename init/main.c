@@ -604,8 +604,11 @@ asmlinkage __visible void __init start_kernel(void)
 	// IMRT >> cpu가 일정 개수 이상을 초과하게 되면
 	// 더 큰 log buffer를 재할당 해준다.
 	setup_log_buf(0);
+    // IMRT >> vfs관련 cache들을 early init한다.
 	vfs_caches_init_early();
+    // IMRT >> main exception table을 sort한다. (binary search를 위함)
 	sort_main_extable();
+    // IMRT >> break_hook에 미리 선언된 bug_break_hook 핸들러를 등록한다.
 	trap_init();
 	mm_init();
 

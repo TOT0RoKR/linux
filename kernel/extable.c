@@ -46,6 +46,14 @@ u32 __initdata __visible main_extable_sort_needed = 1;
 /* Sort the kernel's built-in exception table */
 void __init sort_main_extable(void)
 {
+    /* IMRT >>
+     * 커널모드에서 실행되는 프로세스가 유저모드 메모리를 참조할 때, 
+     * page fault가 발생할 경우, mmu는 exception을 발생시키고, cpu는 do_page_fault를 부른다.
+     * 이 때, exception이 발생할 수 있는 insn(instruction number)들과 fixup code address 쌍이 .section __ex_table에 저장되어 있으며, 
+     * cpu는 do_page_fault를 call하여 해당 exception table을 binary search 한다.
+     * 때문에, binary search를 위한 key(insn) 값으로 exception table의 정렬이 필요하다.
+     */
+    // IMRT >> Exception table을 참조하면, register 수정없이도 continuation 코드를 수행할 수 있다. 
 	if (main_extable_sort_needed && __stop___ex_table > __start___ex_table) {
 		pr_notice("Sorting __ex_table...\n");
 		sort_extable(__start___ex_table, __stop___ex_table);
