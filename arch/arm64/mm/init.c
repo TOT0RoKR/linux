@@ -622,15 +622,19 @@ void __init mem_init(void)
 {
 	if (swiotlb_force == SWIOTLB_FORCE ||
 	    max_pfn > (arm64_dma_phys_limit >> PAGE_SHIFT))
+        // IMRT >> IO TLB용 버퍼 메모리를 할당한다.
 		swiotlb_init(1);
 	else
 		swiotlb_force = SWIOTLB_NO_FORCE;
-
+    // IMRT >> 싱글노드를 사용하는 시스템인 경우에만 전역 max_mapnr에 mem_map[] 배열에 대한 인덱스 번호를 저장한다.
 	set_max_mapnr(pfn_to_page(max_pfn) - mem_map);
 
 #ifndef CONFIG_SPARSEMEM_VMEMMAP
+    // IMRT >> vmemmap을 사용하지 않는 경우, 메모리 낭비가 발생하지 않도록, 미사용 공간에 대한 mem_map을 페이지 단위로 reserved memblock에서 free 시킨다.
 	free_unused_memmap();
 #endif
+    // IMRT >> free memblock 영역에 대해 모두 버디 메모리 할당자의 빈 페이지로 이관 등록한다.
+    //         버디를 최초로 생성한다.
 	/* this will put all unused low memory onto the freelists */
 	free_all_bootmem();
 
