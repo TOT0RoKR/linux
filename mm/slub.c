@@ -3306,17 +3306,21 @@ static inline int alloc_kmem_cache_cpus(struct kmem_cache *s)
 	 * Must align to double word boundary for the double cmpxchg
 	 * instructions to work; see __pcpu_double_call_return_bool().
 	 */
+	// IMRT >> per-cpu로부터 cpu별로 struct kmem_cache_cpu가 들어갈
+	// 공간을 할당.
 	s->cpu_slab = __alloc_percpu(sizeof(struct kmem_cache_cpu),
 				     2 * sizeof(void *));
 
 	if (!s->cpu_slab)
 		return 0;
 
+	// IMRT >> per-cpu slab에 tid = 해당 cpu 넘버로 초기화.
 	init_kmem_cache_cpus(s);
 
 	return 1;
 }
 
+// IMRT >> struct kmem_cache_node는 아래 slub으로 부터 할당받는다.
 static struct kmem_cache *kmem_cache_node;
 
 /*
@@ -3328,6 +3332,7 @@ static struct kmem_cache *kmem_cache_node;
  * when allocating for the kmem_cache_node. This is used for bootstrapping
  * memory on a fresh node that has no slab structures yet.
  */
+// IMRT >> kmem_cache_node 캐시를 할당 받는 함수.
 static void early_kmem_cache_node_alloc(int node)
 {
 	struct page *page;
@@ -3335,6 +3340,8 @@ static void early_kmem_cache_node_alloc(int node)
 
 	BUG_ON(kmem_cache_node->size < sizeof(struct kmem_cache_node));
 
+	// IMRT >> 아직 kmem_cache_node가 없는 상태에서 buddy 할당자를 통해서
+	// slub 공간을 생성.
 	page = new_slab(kmem_cache_node, GFP_NOWAIT, node);
 
 	BUG_ON(!page);
@@ -3355,6 +3362,7 @@ static void early_kmem_cache_node_alloc(int node)
 #endif
 	kasan_kmalloc(kmem_cache_node, n, sizeof(struct kmem_cache_node),
 		      GFP_KERNEL);
+	// IMRT >> struct kmem_cache_node의 필드를 초기화 한다.
 	init_kmem_cache_node(n);
 	inc_slabs_node(kmem_cache_node, node, page->objects);
 
@@ -3362,6 +3370,7 @@ static void early_kmem_cache_node_alloc(int node)
 	 * No locks need to be taken here as it has just been
 	 * initialized and there is no concurrent access.
 	 */
+	// IMRT >> 할당 받은 page를 node의 partial list에 추가한다.
 	__add_partial(n, page, DEACTIVATE_TO_HEAD);
 }
 
@@ -3387,6 +3396,7 @@ static int init_kmem_cache_nodes(struct kmem_cache *s)
 {
 	int node;
 
+	// node별로 반복한다.
 	for_each_node_state(node, N_NORMAL_MEMORY) {
 		struct kmem_cache_node *n;
 
@@ -3394,6 +3404,9 @@ static int init_kmem_cache_nodes(struct kmem_cache *s)
 			early_kmem_cache_node_alloc(node);
 			continue;
 		}
+		// IMRT >> DOWN 상태에서 만든 kmem_cache_node를 이용해서
+		// 현재 할당 중인 struct kmem_cache *s에 들어갈
+		// struct kmem_cache_node의 공간을 할당 받는다.
 		n = kmem_cache_alloc_node(kmem_cache_node,
 						GFP_KERNEL, node);
 
@@ -3402,6 +3415,7 @@ static int init_kmem_cache_nodes(struct kmem_cache *s)
 			return 0;
 		}
 
+		// IMRT >> n을 초기화하고 s->node로 설정한다.
 		init_kmem_cache_node(n);
 		s->node[node] = n;
 	}
@@ -3583,6 +3597,7 @@ static int kmem_cache_open(struct kmem_cache *s, slab_flags_t flags)
 	if (need_reserve_slab_rcu && (s->flags & SLAB_TYPESAFE_BY_RCU))
 		s->reserved = sizeof(struct rcu_head);
 
+	// IMRT >> s->oo(min,max)를 채운다. (order와 object를 계산하여 초기화)
 	if (!calculate_sizes(s, -1))
 		goto error;
 	if (disable_higher_order_debug) {
@@ -3623,12 +3638,15 @@ static int kmem_cache_open(struct kmem_cache *s, slab_flags_t flags)
 			goto error;
 	}
 
+	// node partial slab을 초기화
 	if (!init_kmem_cache_nodes(s))
 		goto error;
 
+	// cpu patial slab을 초기화
 	if (alloc_kmem_cache_cpus(s))
 		return 0;
 
+	// cpu slab 자료구조 생성을 실패할 경우 node를 해제한다.
 	free_kmem_cache_nodes(s);
 error:
 	if (flags & SLAB_PANIC)
@@ -4159,9 +4177,13 @@ static struct notifier_block slab_memory_callback_nb = {
 static struct kmem_cache * __init bootstrap(struct kmem_cache *static_cache)
 {
 	int node;
+	// IMRT >> kmem_cache_zalloc으로부터 struct kmem_cache를 
+	// kmem_cache의 slub에서 할당 받을 수 있다.
 	struct kmem_cache *s = kmem_cache_zalloc(kmem_cache, GFP_NOWAIT);
 	struct kmem_cache_node *n;
 
+	//IMRT >> init_data 영역에 임시로 만들었던 static_cache를
+	// s로 복사
 	memcpy(s, static_cache, kmem_cache->object_size);
 
 	/*
@@ -4169,8 +4191,11 @@ static struct kmem_cache * __init bootstrap(struct kmem_cache *static_cache)
 	 * up.  Even if it weren't true, IRQs are not up so we couldn't fire
 	 * IPIs around.
 	 */
+	// IMRT >> cpu partial slab에 대해서 flush
 	__flush_cpu_slab(s, smp_processor_id());
-	for_each_kmem_cache_node(s, node, n) {
+	// IMRT >> s->node 들의 partial에 page들에게 s를 지정한다.(등록한다)
+	// s(kmem_cache)->node[index]->partial(page)->slab_cache == s;
+ 	for_each_kmem_cache_node(s, node, n) {
 		struct page *p;
 
 		list_for_each_entry(p, &n->partial, lru)
@@ -4182,6 +4207,7 @@ static struct kmem_cache * __init bootstrap(struct kmem_cache *static_cache)
 #endif
 	}
 	slab_init_memcg_params(s);
+	// IMRT >> 전역 slab_caches에 s를 등록.
 	list_add(&s->list, &slab_caches);
 	memcg_link_cache(s);
 	return s;
@@ -4189,28 +4215,40 @@ static struct kmem_cache * __init bootstrap(struct kmem_cache *static_cache)
 
 void __init kmem_cache_init(void)
 {
+	// 
+	// IMRT >> boot 시에 사용할 임시 kmem_cache 캐시 들.
+	// IMRT >> 아직 cache가 없으므로, initdata 영역에
+	// 임시로 사용할 struct를 생성. (부팅 완료시 할당해제)
 	static __initdata struct kmem_cache boot_kmem_cache,
 		boot_kmem_cache_node;
 
 	if (debug_guardpage_minorder())
 		slub_max_order = 0;
 
+	// IMRT >> kmem_cache_node와 kmem_cache를 할당 받을 캐시.
 	kmem_cache_node = &boot_kmem_cache_node;
 	kmem_cache = &boot_kmem_cache;
 
+	// IMRT >> kmem_cache_node 캐시를 생성한다.
+	// 현재 상태 slab_state == DOWN
 	create_boot_cache(kmem_cache_node, "kmem_cache_node",
 		sizeof(struct kmem_cache_node), SLAB_HWCACHE_ALIGN, 0, 0);
 
 	register_hotmemory_notifier(&slab_memory_callback_nb);
 
 	/* Able to allocate the per node structures */
+	// IMRT >> 이미 존재하는 캐시로부터 캐시객체를 할당 받을 수 있는 상태
+	// (kmem_cache_node로부터만 캐시 객체를 할당받을 수 있는 상태.)
 	slab_state = PARTIAL;
 
+	// IMRT >> kmem_cache 캐시를 생성한다.
 	create_boot_cache(kmem_cache, "kmem_cache",
 			offsetof(struct kmem_cache, node) +
 				nr_node_ids * sizeof(struct kmem_cache_node *),
 		       SLAB_HWCACHE_ALIGN, 0, 0);
 
+	// IMRT >> static으로 존재하던 boot_kmem_cache를 kmem_cache로부터
+	// 할당 받은 object에 정식 초기화(복사)
 	kmem_cache = bootstrap(&boot_kmem_cache);
 
 	/*
@@ -4218,6 +4256,7 @@ void __init kmem_cache_init(void)
 	 * kmem_cache_node is separately allocated so no need to
 	 * update any list pointers.
 	 */
+	// IMRT >> 위와 과정 동일.
 	kmem_cache_node = bootstrap(&boot_kmem_cache_node);
 
 	/* Now we can use the kmem_cache to allocate kmalloc slabs */
