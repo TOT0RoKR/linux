@@ -197,10 +197,12 @@ static inline void __check_heap_object(const void *ptr, unsigned long n,
  * Setting ARCH_KMALLOC_MINALIGN in arch headers allows that.
  */
 #if defined(ARCH_DMA_MINALIGN) && ARCH_DMA_MINALIGN > 8
+// TOT0Ro >> 128
 #define ARCH_KMALLOC_MINALIGN ARCH_DMA_MINALIGN
 #define KMALLOC_MIN_SIZE ARCH_DMA_MINALIGN
 #define KMALLOC_SHIFT_LOW ilog2(ARCH_DMA_MINALIGN)
 #else
+// TOT0Ro >> 64
 #define ARCH_KMALLOC_MINALIGN __alignof__(unsigned long long)
 #endif
 
@@ -210,6 +212,7 @@ static inline void __check_heap_object(const void *ptr, unsigned long n,
  * aligned buffers.
  */
 #ifndef ARCH_SLAB_MINALIGN
+// TOT0Ro >> 64
 #define ARCH_SLAB_MINALIGN __alignof__(unsigned long long)
 #endif
 

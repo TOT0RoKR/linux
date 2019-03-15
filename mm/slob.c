@@ -145,8 +145,8 @@ static DEFINE_SPINLOCK(slob_lock);
  */
 static void set_slob(slob_t *s, slobidx_t size, slob_t *next)
 {
-	slob_t *base = (slob_t *)((unsigned long)s & PAGE_MASK);
-	slobidx_t offset = next - base;
+	slob_t *base = (slob_t *)((unsigned long)s & PAGE_MASK); // TOT0Ro >> page 주소
+	slobidx_t offset = next - base; // TOT0Ro >> page to next 까지의 offset
 
 	if (size > 1) {
 		s[0].units = size;
@@ -170,6 +170,11 @@ static slobidx_t slob_units(slob_t *s)
  */
 static slob_t *slob_next(slob_t *s)
 {
+	// TOT0Ro >> freelist는 전체 물리주소가 적혀있으니 현재 페이지에서 
+	// 해당 주소까지의 entry만 뽑아냄.
+	// 수정 : 아닌 것 같음 이것은 그냥 s가 속한 page 주소만 뽑는 것.
+	// 유닛에는 page의 base 주소로부터 절데 offset이 저장되어 있을 것.
+	// -> s와 다음 slob의 offset이 아닌 page entry와 다음 slob의 offset
 	slob_t *base = (slob_t *)((unsigned long)s & PAGE_MASK);
 	slobidx_t next;
 
@@ -185,6 +190,7 @@ static slob_t *slob_next(slob_t *s)
  */
 static int slob_last(slob_t *s)
 {
+	// TOT0Ro >> 마지막 slob 조각은 해당 unit에 offset이 저장되어 있지 않음 == 0.
 	return !((unsigned long)slob_next(s) & ~PAGE_MASK);
 }
 
@@ -220,9 +226,13 @@ static void *slob_page_alloc(struct page *sp, size_t size, int align)
 	slob_t *prev, *cur, *aligned = NULL;
 	int delta = 0, units = SLOB_UNITS(size);
 
+	// TOT0Ro >> sp에 있는 모든 slob block을 찾음.
 	for (prev = NULL, cur = sp->freelist; ; prev = cur, cur = slob_next(cur)) {
-		slobidx_t avail = slob_units(cur);
+		slobidx_t avail = slob_units(cur); // TOT0Ro >> cur 위치에서 사용할 수 있는 유닛 size
 
+		// TOT0Ro >> align 값이 존재하면 align 단위로 align 한다.
+		// aligned == cur을 align 시킨 주소
+		// delta == align 하면서 추가된 크기(byte 단위)
 		if (align) {
 			aligned = (slob_t *)ALIGN((unsigned long)cur, align);
 			delta = aligned - cur;
@@ -230,10 +240,14 @@ static void *slob_page_alloc(struct page *sp, size_t size, int align)
 		if (avail >= units + delta) { /* room enough? */
 			slob_t *next;
 
+			// TOT0Ro >> align을 위한 조각 head가 필요함?
 			if (delta) { /* need to fragment head to align? */
-				next = slob_next(cur);
-				set_slob(aligned, avail - delta, next);
-				set_slob(cur, delta, aligned);
+				next = slob_next(cur); // TOT0Ro >> cur가 가르키는 다음 slob 조각
+				set_slob(aligned, avail - delta, next); // aligned 위치에 size 만큼의
+											// unit 개수를 aligned 설정
+											// 하고 next를 가르키도록 함.
+				set_slob(cur, delta, aligned); // cur 위치에 delta 크기만큼의 unit 개수를
+									// 설정하고 aligned를 가르키도록 함.
 				prev = cur;
 				cur = aligned;
 				avail = slob_units(cur);
@@ -258,6 +272,7 @@ static void *slob_page_alloc(struct page *sp, size_t size, int align)
 				clear_slob_page_free(sp);
 			return cur;
 		}
+		// TOT0Ro >> 마지막 slob이면 NULL 반환
 		if (slob_last(cur))
 			return NULL;
 	}
@@ -283,20 +298,25 @@ static void *slob_alloc(size_t size, gfp_t gfp, int align, int node)
 
 	spin_lock_irqsave(&slob_lock, flags);
 	/* Iterate through each partially free page, try to find room */
+	// TOT0Ro >> sp = container_of(slob_list->next)
+	// struct list_head *lru <- slob_list
 	list_for_each_entry(sp, slob_list, lru) {
 #ifdef CONFIG_NUMA
 		/*
 		 * If there's a node specification, search for a partial
 		 * page with a matching node id in the freelist.
 		 */
+		// TOT0Ro >> node가 없으면, page의 node가 slob 할당을 요청한 노드가 아니면.
 		if (node != NUMA_NO_NODE && page_to_nid(sp) != node)
 			continue;
 #endif
 		/* Enough room on this page? */
+		// TOT0Ro >> 할당요청한 size만큼의 block(unit)이 page내에 존재하지 않으면.
 		if (sp->units < SLOB_UNITS(size))
 			continue;
 
 		/* Attempt to alloc */
+		// TOT0Ro >> 할당 시도.
 		prev = sp->lru.prev;
 		b = slob_page_alloc(sp, size, align);
 		if (!b)
@@ -424,6 +444,8 @@ out:
  * End of slob allocator proper. Begin kmem_cache_alloc and kmalloc frontend.
  */
 
+// TOT0Ro >> size에 align을 더한 만큼 block을 할당 받은 뒤, align 만큼의 공간에
+// size를 저장하고, 반환은 align 뒤의 공간만 반환.
 static __always_inline void *
 __do_kmalloc_node(size_t size, gfp_t gfp, int node, unsigned long caller)
 {
@@ -444,6 +466,8 @@ __do_kmalloc_node(size_t size, gfp_t gfp, int node, unsigned long caller)
 
 		if (!m)
 			return NULL;
+		// TOT0Ro >> size 외에 추가로 할당한 align 부분에 size를 저장하고
+		// 반환은 size만큼만 반환.
 		*m = size;
 		ret = (void *)m + align;
 
