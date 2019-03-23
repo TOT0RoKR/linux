@@ -2456,16 +2456,20 @@ static inline void *new_slab_objects(struct kmem_cache *s, gfp_t flags,
 		return freelist;
 
 	// IMRT >> remote로 부터도 받아오지 못하면 버디로부터 새로 할당.
+	// IMRT: 모든 freelist가 차있는 경우 buddy에서 새로운 page를 할당받는다.
 	page = new_slab(s, flags, node);
 	if (page) {
 		c = raw_cpu_ptr(s->cpu_slab);
+		// IMRT: s->cpu_slab에서 보고 있는 page가 존재하는 경우
 		if (c->page)
+		 // IMRT: 현재 cpu_slab에서 보고있는 page를 제거한다.
 			flush_slab(s, c);
 
 		/*
 		 * No other reference to the page yet so we can
 		 * muck around with it freely without cmpxchg
 		 */
+		//IMRT: 새로 할당받은 page의 freelist를 freelist에 저장한다.
 		freelist = page->freelist;
 		page->freelist = NULL;
 
@@ -2603,6 +2607,7 @@ new_slab:
 
 	// IMRT >> c에 partial이 있을 때, partial list의 첫 번째 page를
 	// c->page로 넣고, partial은 두 번째 page를 가르키도록 하고 새로 alloc 시도.
+	// IMRT: http://jake.dothome.co.kr/slub-object-alloc/ slowpath 2번
 	if (slub_percpu_partial(c)) {
 		page = c->page = slub_percpu_partial(c);
 		slub_set_percpu_partial(c, page);
@@ -2626,6 +2631,7 @@ new_slab:
 			!alloc_debug_processing(s, page, freelist, addr))
 		goto new_slab;	/* Slab failed checks. Next slab needed */
 
+	// IMRT: 여기부터 다시(2019.03.16)
 	deactivate_slab(s, page, get_freepointer(s, freelist), c);
 	return freelist;
 }
