@@ -4320,12 +4320,15 @@ void __init kmem_cache_init(void)
 	kmem_cache_node = bootstrap(&boot_kmem_cache_node);
 
 	/* Now we can use the kmem_cache to allocate kmalloc slabs */
+    // IMRT >> size_index 테이블을 채운다.
 	setup_kmalloc_cache_index_table();
 	create_kmalloc_caches(0);
 
 	/* Setup random freelists for each cache */
+    // IMRT >> SLUB overflow 및 SLUB attack 방지를 위해 freelist randomization option이 켜져있을 경우 수행
 	init_freelist_randomization();
 
+    // IMRT >> CPUHP_SLUB_DEAD 상태에 대한 slub_cpu_dead 콜백 등록
 	cpuhp_setup_state_nocalls(CPUHP_SLUB_DEAD, "slub:dead", NULL,
 				  slub_cpu_dead);
 

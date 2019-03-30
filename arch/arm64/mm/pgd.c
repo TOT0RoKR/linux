@@ -46,6 +46,7 @@ void pgd_free(struct mm_struct *mm, pgd_t *pgd)
 
 void __init pgd_cache_init(void)
 {
+    // IMRT >> 1단계 페이징일 경우 사용하지 않는다.
 	if (PGD_SIZE == PAGE_SIZE)
 		return;
 

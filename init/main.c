@@ -508,7 +508,9 @@ static void __init mm_init(void)
 	page_ext_init_flatmem();
     // IMRT >> 버디 시스템을 준비한다.
 	mem_init();
+    // IMRT >> slab/slub/slob 초기화.
 	kmem_cache_init();
+    // IMRT >> Page table을 위한 kmem_cache를 할당받는다.  (Split page table lock, PGD cache)
 	pgtable_init();
 	vmalloc_init();
 	ioremap_huge_init();
