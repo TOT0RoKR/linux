@@ -512,6 +512,7 @@ static void __init mm_init(void)
 	kmem_cache_init();
     // IMRT >> Page table을 위한 kmem_cache를 할당받는다.  (Split page table lock, PGD cache)
 	pgtable_init();
+    // IMRT >> vmalloc 초기화.
 	vmalloc_init();
 	ioremap_huge_init();
 	/* Should be run before the first non-init thread is created */

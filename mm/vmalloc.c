@@ -1257,6 +1257,9 @@ void __init vmalloc_init(void)
 	struct vm_struct *tmp;
 	int i;
 
+    // IMRT >> per_cpu 영역의 vmap_block_queue, vfree_deferred를 가져와 초기화한다. 
+    //         vmap_block_queue : 할당 및 해제 목적의 lock을 관리하는 queue.
+    //         vfree_deferred : vfree의 지연처리가 필요할 경우의 work queue 엔트리
 	for_each_possible_cpu(i) {
 		struct vmap_block_queue *vbq;
 		struct vfree_deferred *p;
@@ -1269,6 +1272,9 @@ void __init vmalloc_init(void)
 		INIT_WORK(&p->wq, free_work);
 	}
 
+    // IMRT >> 기존에 초기화한 vm_struct(커널 이미지)가 있을 경우, 
+    //         vmap_area를 할당하고 RB tree와 list에 등록한다.
+    //         (vmlist = early 등록된 vm_struct들의 list)
 	/* Import existing vmlist entries. */
 	for (tmp = vmlist; tmp; tmp = tmp->next) {
 		va = kzalloc(sizeof(struct vmap_area), GFP_NOWAIT);
