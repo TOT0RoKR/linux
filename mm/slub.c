@@ -371,6 +371,7 @@ static inline void set_page_slub_counters(struct page *page, unsigned long count
 	page->objects = tmp.objects;
 }
 
+// IMRT >> page에 저장된 freelist와 counters가 old와 동일하다면 new로 변경
 /* Interrupts must be disabled (for the fallback code to work right) */
 static inline bool __cmpxchg_double_slab(struct kmem_cache *s, struct page *page,
 		void *freelist_old, unsigned long counters_old,
@@ -1779,6 +1780,7 @@ static inline void *acquire_slab(struct kmem_cache *s,
 	counters = page->counters;
 	new.counters = counters;
 	*objects = new.objects - new.inuse;
+	// IMRT >> 첫 번째 slab이면 해당 slab을 모두 사용중으로 변경.
 	if (mode) {
 		new.inuse = page->objects;
 		new.freelist = NULL;
@@ -1795,6 +1797,7 @@ static inline void *acquire_slab(struct kmem_cache *s,
 			"acquire_slab"))
 		return NULL;
 
+	// IMRT >> s->n->page를 삭제하고 page의 freelist를 반환.
 	remove_partial(n, page);
 	WARN_ON(!freelist);
 	return freelist;
@@ -1824,25 +1827,37 @@ static void *get_partial_node(struct kmem_cache *s, struct kmem_cache_node *n,
 		return NULL;
 
 	spin_lock(&n->list_lock);
+
+	// IMRT >> s->node[nid] == n or 가까운 node
+	// page == &n->partial이 가리키고 있는 page
+	// page2 == page->next
 	list_for_each_entry_safe(page, page2, &n->partial, lru) {
 		void *t;
 
 		if (!pfmemalloc_match(page, flags))
 			continue;
 
+		// IMRT >> objects = page에 존재하는 free object의 개수
+		// object == page의 freelist
 		t = acquire_slab(s, n, page, object == NULL, &objects);
 		if (!t)
 			break;
 
+		// IMRT >> 사용가능한 총 slub 객체
 		available += objects;
+		// IMRT >> 첫 번째 slub 이면
 		if (!object) {
+			// IMRT >> cpu_slab의 page를 t로 설정.
 			c->page = page;
 			stat(s, ALLOC_FROM_PARTIAL);
 			object = t;
-		} else {
+		} else { // IMRT >> 두 번째 slub page 부터는 cpu_slab의 partial에 등록.
 			put_cpu_partial(s, page, 0);
 			stat(s, CPU_PARTIAL_NODE);
 		}
+
+		// IMRT >> cpu partial이 없거나, 사용 가능한 free obj(available)가
+		// s->cpu_partial 수의 절반을 넘으면 중지.
 		if (!kmem_cache_has_cpu_partial(s)
 			|| available > slub_cpu_partial(s) / 2)
 			break;
@@ -1925,15 +1940,22 @@ static void *get_partial(struct kmem_cache *s, gfp_t flags, int node,
 	void *object;
 	int searchnode = node;
 
+	// IMRT >> node가 지정되지 않았다면 가까운 메모리가 있는 node를 가져옴
 	if (node == NUMA_NO_NODE)
 		searchnode = numa_mem_id();
+	// IMRT >> 지정된 node에 page가 없다면 가까운 메모리가 있는 node를 가져옴.
 	else if (!node_present_pages(node))
 		searchnode = node_to_mem_node(node);
 
+	// IMRT >> node partial에서 맨 처음 slab을  cpu_slab->freelist 로 옮기고 그 object를 반환.
+	// free obj 수가 cpu_partial / 2 보다 클 때까지 cpu partial list에 slub을
+	// node partial에서 가져옴.
 	object = get_partial_node(s, get_node(s, searchnode), c, flags);
 	if (object || node != NUMA_NO_NODE)
 		return object;
 
+	// IMRT >> node partial에서 맨 처음 slub을 받아오지 못하면 리모트 노드에서
+	// 가져온다.
 	return get_any_partial(s, flags, c);
 }
 
@@ -2007,6 +2029,9 @@ static void init_kmem_cache_cpus(struct kmem_cache *s)
 /*
  * Remove the cpu slab
  */
+// IMRT >> cpu_slab->freelist를 page->freelist로 옮기고,
+// (remote object가 남아 있을 수 있기 때문)
+// node partial로 옮길지, 버디로 돌려줄지 결정함.
 static void deactivate_slab(struct kmem_cache *s, struct page *page,
 				void *freelist, struct kmem_cache_cpu *c)
 {
@@ -2433,16 +2458,21 @@ static inline void *new_slab_objects(struct kmem_cache *s, gfp_t flags,
 	if (freelist)
 		return freelist;
 
+	// IMRT >> remote로 부터도 받아오지 못하면 버디로부터 새로 할당.
+	// IMRT: 모든 freelist가 차있는 경우 buddy에서 새로운 page를 할당받는다.
 	page = new_slab(s, flags, node);
 	if (page) {
 		c = raw_cpu_ptr(s->cpu_slab);
+		// IMRT: s->cpu_slab에서 보고 있는 page가 존재하는 경우
 		if (c->page)
+		 // IMRT: 현재 cpu_slab에서 보고있는 page를 제거한다.
 			flush_slab(s, c);
 
 		/*
 		 * No other reference to the page yet so we can
 		 * muck around with it freely without cmpxchg
 		 */
+		//IMRT: 새로 할당받은 page의 freelist를 freelist에 저장한다.
 		freelist = page->freelist;
 		page->freelist = NULL;
 
@@ -2516,17 +2546,23 @@ static inline void *get_freelist(struct kmem_cache *s, struct page *page)
  * Version of __slab_alloc to use when we know that interrupts are
  * already disabled (which is the case for bulk allocation).
  */
+// IMRT >> http://jake.dothome.co.kr/slub-object-alloc/
+// slow/fast path를 수행하여 freelist를 반환.
 static void *___slab_alloc(struct kmem_cache *s, gfp_t gfpflags, int node,
 			  unsigned long addr, struct kmem_cache_cpu *c)
 {
 	void *freelist;
 	struct page *page;
 
+	// IMRT >> page가 존재하면 fast path가 가능
 	page = c->page;
 	if (!page)
 		goto new_slab;
 redo:
 
+	// IMRT >> 요청한 node와 page의 node가 다르면
+	// 할당 해제(deactivate_slab => cpu_slab의 freelist를 page의 freelist로 돌려주고
+	// node partial로 넣거나 버디로 돌려줌)를 하고 재할당.
 	if (unlikely(!node_match(page, node))) {
 		int searchnode = node;
 
@@ -2545,18 +2581,28 @@ redo:
 	 * PFMEMALLOC but right now, we are losing the pfmemalloc
 	 * information when the page leaves the per-cpu allocator
 	 */
+	// IMRT >> free 페이지가 부족하여 low 워터마크 아래로 내려왔을 때 할당 받은
+	// 페이지(특수 목적으로 사용)인 경우 할당 해제하고 재할당한다.
 	if (unlikely(!pfmemalloc_match(page, gfpflags))) {
 		deactivate_slab(s, page, c->freelist, c);
 		goto new_slab;
 	}
 
 	/* must check again c->freelist in case of cpu migration or IRQ */
+	// IMRT >> IRQ나 cpu migration 떄문에 없던 freelist가 발생했을 경우
+	// 그 object를 사용.
 	freelist = c->freelist;
 	if (freelist)
 		goto load_freelist;
 
+	// IMRT >> cpu의 freelist가 존재하지 않으면
+	// page에서 freelist를 가져옴.
+	// slow path 1 을 의미.
 	freelist = get_freelist(s, page);
 
+	// IMRT >> page에 freelist가 존재하지 않으면
+	// cpu가 가르키는 page를 제거하고 재할당.
+	// => slab obj가 모두 사용중임을 의미.
 	if (!freelist) {
 		c->page = NULL;
 		stat(s, DEACTIVATE_BYPASS);
@@ -2572,12 +2618,17 @@ load_freelist:
 	 * That page must be frozen for per cpu allocations to work.
 	 */
 	VM_BUG_ON(!c->page->frozen);
+	// IMRT >> c->freelist는 freelist의 next를 가리킨다.
 	c->freelist = get_freepointer(s, freelist);
 	c->tid = next_tid(c->tid);
+	// IMRT >> freelist 즉, object 할당 완료.
 	return freelist;
 
 new_slab:
 
+	// IMRT >> c에 partial이 있을 때, partial list의 첫 번째 page를
+	// c->page로 넣고, partial은 두 번째 page를 가르키도록 하고 새로 alloc 시도.
+	// IMRT: http://jake.dothome.co.kr/slub-object-alloc/ slowpath 2번
 	if (slub_percpu_partial(c)) {
 		page = c->page = slub_percpu_partial(c);
 		slub_set_percpu_partial(c, page);
@@ -2585,6 +2636,7 @@ new_slab:
 		goto redo;
 	}
 
+	// IMRT >> slowpath 3 or 4를 함.
 	freelist = new_slab_objects(s, gfpflags, node, &c);
 
 	if (unlikely(!freelist)) {
@@ -2592,6 +2644,7 @@ new_slab:
 		return NULL;
 	}
 
+	// IMRT >> gfpflags가 잘 맞으면 freelist를 load
 	page = c->page;
 	if (likely(!kmem_cache_debug(s) && pfmemalloc_match(page, gfpflags)))
 		goto load_freelist;
@@ -2609,6 +2662,7 @@ new_slab:
  * Another one that disabled interrupt and compensates for possible
  * cpu changes by refetching the per cpu area pointer.
  */
+// IMRT >> IRQ save를 하고 slab_alloc을 시도. (freelist를 반환)
 static void *__slab_alloc(struct kmem_cache *s, gfp_t gfpflags, int node,
 			  unsigned long addr, struct kmem_cache_cpu *c)
 {
@@ -2640,6 +2694,7 @@ static void *__slab_alloc(struct kmem_cache *s, gfp_t gfpflags, int node,
  *
  * Otherwise we can simply pick the next object from the lockless free list.
  */
+// 
 static __always_inline void *slab_alloc_node(struct kmem_cache *s,
 		gfp_t gfpflags, int node, unsigned long addr)
 {
@@ -2687,10 +2742,12 @@ redo:
 
 	object = c->freelist;
 	page = c->page;
+	// IMRT >> cpu freelist가 비었거나 cpu slab page의 node가 node와 맞지 않으면
 	if (unlikely(!object || !node_match(page, node))) {
+		// IMRT >> slab obj 한개 할당.
 		object = __slab_alloc(s, gfpflags, node, addr, c);
 		stat(s, ALLOC_SLOWPATH);
-	} else {
+	} else { // IMRT >> cpu freelist가 존재하면 obj 하나 할당
 		void *next_object = get_freepointer_safe(s, object);
 
 		/*
@@ -3306,17 +3363,21 @@ static inline int alloc_kmem_cache_cpus(struct kmem_cache *s)
 	 * Must align to double word boundary for the double cmpxchg
 	 * instructions to work; see __pcpu_double_call_return_bool().
 	 */
+	// IMRT >> per-cpu로부터 cpu별로 struct kmem_cache_cpu가 들어갈
+	// 공간을 할당.
 	s->cpu_slab = __alloc_percpu(sizeof(struct kmem_cache_cpu),
 				     2 * sizeof(void *));
 
 	if (!s->cpu_slab)
 		return 0;
 
+	// IMRT >> per-cpu slab에 tid = 해당 cpu 넘버로 초기화.
 	init_kmem_cache_cpus(s);
 
 	return 1;
 }
 
+// IMRT >> struct kmem_cache_node는 아래 slub으로 부터 할당받는다.
 static struct kmem_cache *kmem_cache_node;
 
 /*
@@ -3328,6 +3389,7 @@ static struct kmem_cache *kmem_cache_node;
  * when allocating for the kmem_cache_node. This is used for bootstrapping
  * memory on a fresh node that has no slab structures yet.
  */
+// IMRT >> kmem_cache_node 캐시를 할당 받는 함수.
 static void early_kmem_cache_node_alloc(int node)
 {
 	struct page *page;
@@ -3335,6 +3397,8 @@ static void early_kmem_cache_node_alloc(int node)
 
 	BUG_ON(kmem_cache_node->size < sizeof(struct kmem_cache_node));
 
+	// IMRT >> 아직 kmem_cache_node가 없는 상태에서 buddy 할당자를 통해서
+	// slub 공간을 생성.
 	page = new_slab(kmem_cache_node, GFP_NOWAIT, node);
 
 	BUG_ON(!page);
@@ -3345,6 +3409,7 @@ static void early_kmem_cache_node_alloc(int node)
 
 	n = page->freelist;
 	BUG_ON(!n);
+	// IMRT >> 다음 free pointer를 가르키게 됨.
 	page->freelist = get_freepointer(kmem_cache_node, n);
 	page->inuse = 1;
 	page->frozen = 0;
@@ -3355,6 +3420,7 @@ static void early_kmem_cache_node_alloc(int node)
 #endif
 	kasan_kmalloc(kmem_cache_node, n, sizeof(struct kmem_cache_node),
 		      GFP_KERNEL);
+	// IMRT >> struct kmem_cache_node의 필드를 초기화 한다.
 	init_kmem_cache_node(n);
 	inc_slabs_node(kmem_cache_node, node, page->objects);
 
@@ -3362,6 +3428,7 @@ static void early_kmem_cache_node_alloc(int node)
 	 * No locks need to be taken here as it has just been
 	 * initialized and there is no concurrent access.
 	 */
+	// IMRT >> 할당 받은 page를 node의 partial list에 추가한다.
 	__add_partial(n, page, DEACTIVATE_TO_HEAD);
 }
 
@@ -3383,10 +3450,12 @@ void __kmem_cache_release(struct kmem_cache *s)
 	free_kmem_cache_nodes(s);
 }
 
+// IMRT >> s->node를 kmem_cache_node slab으로부터 할당
 static int init_kmem_cache_nodes(struct kmem_cache *s)
 {
 	int node;
 
+	// node별로 반복한다.
 	for_each_node_state(node, N_NORMAL_MEMORY) {
 		struct kmem_cache_node *n;
 
@@ -3394,14 +3463,19 @@ static int init_kmem_cache_nodes(struct kmem_cache *s)
 			early_kmem_cache_node_alloc(node);
 			continue;
 		}
+		// IMRT >> DOWN 상태에서 만든 kmem_cache_node를 이용해서
+		// 현재 할당 중인 struct kmem_cache *s에 들어갈
+		// struct kmem_cache_node인 node[]들의 공간을 할당 받는다.
 		n = kmem_cache_alloc_node(kmem_cache_node,
 						GFP_KERNEL, node);
 
+		// IMRT >> 하나라도 실패하면 s에 있는 node를 전부 free
 		if (!n) {
 			free_kmem_cache_nodes(s);
 			return 0;
 		}
 
+		// IMRT >> n을 초기화하고 s->node로 설정한다.
 		init_kmem_cache_node(n);
 		s->node[node] = n;
 	}
@@ -3583,6 +3657,7 @@ static int kmem_cache_open(struct kmem_cache *s, slab_flags_t flags)
 	if (need_reserve_slab_rcu && (s->flags & SLAB_TYPESAFE_BY_RCU))
 		s->reserved = sizeof(struct rcu_head);
 
+	// IMRT >> s->oo(min,max)를 채운다. (order와 object를 계산하여 초기화)
 	if (!calculate_sizes(s, -1))
 		goto error;
 	if (disable_higher_order_debug) {
@@ -3623,12 +3698,15 @@ static int kmem_cache_open(struct kmem_cache *s, slab_flags_t flags)
 			goto error;
 	}
 
+	// node partial slab을 초기화
 	if (!init_kmem_cache_nodes(s))
 		goto error;
 
+	// cpu patial slab을 할당
 	if (alloc_kmem_cache_cpus(s))
 		return 0;
 
+	// cpu slab 자료구조 생성을 실패할 경우 node를 해제한다.
 	free_kmem_cache_nodes(s);
 error:
 	if (flags & SLAB_PANIC)
@@ -4159,9 +4237,13 @@ static struct notifier_block slab_memory_callback_nb = {
 static struct kmem_cache * __init bootstrap(struct kmem_cache *static_cache)
 {
 	int node;
+	// IMRT >> kmem_cache_zalloc으로부터 struct kmem_cache를 
+	// kmem_cache의 slub에서 할당 받을 수 있다.
 	struct kmem_cache *s = kmem_cache_zalloc(kmem_cache, GFP_NOWAIT);
 	struct kmem_cache_node *n;
 
+	//IMRT >> init_data 영역에 임시로 만들었던 static_cache를
+	// s로 복사
 	memcpy(s, static_cache, kmem_cache->object_size);
 
 	/*
@@ -4169,8 +4251,11 @@ static struct kmem_cache * __init bootstrap(struct kmem_cache *static_cache)
 	 * up.  Even if it weren't true, IRQs are not up so we couldn't fire
 	 * IPIs around.
 	 */
+	// IMRT >> cpu partial slab에 대해서 flush
 	__flush_cpu_slab(s, smp_processor_id());
-	for_each_kmem_cache_node(s, node, n) {
+	// IMRT >> s->node 들의 partial에 page들에게 s를 지정한다.(등록한다)
+	// s(kmem_cache)->node[index]->partial(page)->slab_cache == s;
+ 	for_each_kmem_cache_node(s, node, n) {
 		struct page *p;
 
 		list_for_each_entry(p, &n->partial, lru)
@@ -4182,6 +4267,7 @@ static struct kmem_cache * __init bootstrap(struct kmem_cache *static_cache)
 #endif
 	}
 	slab_init_memcg_params(s);
+	// IMRT >> 전역 slab_caches에 s를 등록.
 	list_add(&s->list, &slab_caches);
 	memcg_link_cache(s);
 	return s;
@@ -4189,28 +4275,40 @@ static struct kmem_cache * __init bootstrap(struct kmem_cache *static_cache)
 
 void __init kmem_cache_init(void)
 {
+	// 
+	// IMRT >> boot 시에 사용할 임시 kmem_cache 캐시 들.
+	// IMRT >> 아직 cache가 없으므로, initdata 영역에
+	// 임시로 사용할 struct를 생성. (부팅 완료시 할당해제)
 	static __initdata struct kmem_cache boot_kmem_cache,
 		boot_kmem_cache_node;
 
 	if (debug_guardpage_minorder())
 		slub_max_order = 0;
 
+	// IMRT >> kmem_cache_node와 kmem_cache를 할당 받을 캐시.
 	kmem_cache_node = &boot_kmem_cache_node;
 	kmem_cache = &boot_kmem_cache;
 
+	// IMRT >> kmem_cache_node 캐시를 생성한다.
+	// 현재 상태 slab_state == DOWN
 	create_boot_cache(kmem_cache_node, "kmem_cache_node",
 		sizeof(struct kmem_cache_node), SLAB_HWCACHE_ALIGN, 0, 0);
 
 	register_hotmemory_notifier(&slab_memory_callback_nb);
 
 	/* Able to allocate the per node structures */
+	// IMRT >> 이미 존재하는 캐시로부터 캐시객체를 할당 받을 수 있는 상태
+	// (kmem_cache_node로부터만 캐시 객체를 할당받을 수 있는 상태.)
 	slab_state = PARTIAL;
 
+	// IMRT >> kmem_cache 캐시를 생성한다.
 	create_boot_cache(kmem_cache, "kmem_cache",
 			offsetof(struct kmem_cache, node) +
 				nr_node_ids * sizeof(struct kmem_cache_node *),
 		       SLAB_HWCACHE_ALIGN, 0, 0);
 
+	// IMRT >> static으로 존재하던 boot_kmem_cache를 kmem_cache로부터
+	// 할당 받은 object에 정식 초기화(복사)
 	kmem_cache = bootstrap(&boot_kmem_cache);
 
 	/*
@@ -4218,15 +4316,19 @@ void __init kmem_cache_init(void)
 	 * kmem_cache_node is separately allocated so no need to
 	 * update any list pointers.
 	 */
+	// IMRT >> 위와 과정 동일.
 	kmem_cache_node = bootstrap(&boot_kmem_cache_node);
 
 	/* Now we can use the kmem_cache to allocate kmalloc slabs */
+    // IMRT >> size_index 테이블을 채운다.
 	setup_kmalloc_cache_index_table();
 	create_kmalloc_caches(0);
 
 	/* Setup random freelists for each cache */
+    // IMRT >> SLUB overflow 및 SLUB attack 방지를 위해 freelist randomization option이 켜져있을 경우 수행
 	init_freelist_randomization();
 
+    // IMRT >> CPUHP_SLUB_DEAD 상태에 대한 slub_cpu_dead 콜백 등록
 	cpuhp_setup_state_nocalls(CPUHP_SLUB_DEAD, "slub:dead", NULL,
 				  slub_cpu_dead);
 

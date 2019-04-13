@@ -305,6 +305,7 @@ static inline int gfpflags_to_migratetype(const gfp_t gfp_flags)
 
 static inline bool gfpflags_allow_blocking(const gfp_t gfp_flags)
 {
+ // IMRT: 페이지 할당 요청 시 free 페이지가 부족한 경우에 direct eclaim하도록 요청함.
 	return !!(gfp_flags & __GFP_DIRECT_RECLAIM);
 }
 

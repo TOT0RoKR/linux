@@ -503,10 +503,16 @@ static void __init mm_init(void)
 	 * page_ext requires contiguous pages,
 	 * bigger than MAX_ORDER unless SPARSEMEM.
 	 */
+    // IMRT >> FLATMEM 메모리모델 사용 시 page_ext 옵션이 설정되어 있을 경우, memblock을 이용하여 할당해준다.
+    // IMRT >> page_ext : page 구조체를 변경하지 않고, page 구조체를 확장하여 디버깅에 사용할 수 있다. DEBUG flag등이 들어있다.
 	page_ext_init_flatmem();
+    // IMRT >> 버디 시스템을 준비한다.
 	mem_init();
+    // IMRT >> slab/slub/slob 초기화.
 	kmem_cache_init();
+    // IMRT >> Page table을 위한 kmem_cache를 할당받는다.  (Split page table lock, PGD cache)
 	pgtable_init();
+    // IMRT >> vmalloc 초기화.
 	vmalloc_init();
 	ioremap_huge_init();
 	/* Should be run before the first non-init thread is created */
@@ -610,6 +616,7 @@ asmlinkage __visible void __init start_kernel(void)
 	sort_main_extable();
     // IMRT >> break_hook에 미리 선언된 bug_break_hook 핸들러를 등록한다.
 	trap_init();
+    // IMRT >> 2.23
 	mm_init();
 
 	ftrace_init();

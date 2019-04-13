@@ -1822,7 +1822,9 @@ static inline void pte_lock_deinit(struct page *page) {}
 
 static inline void pgtable_init(void)
 {
+    // IMRT >> Split Page table lock 에 대한 cache 메모리를 할당받는다.
 	ptlock_cache_init();
+    // IMRT >> PGD Cache를 할당받는다.
 	pgtable_cache_init();
 }
 

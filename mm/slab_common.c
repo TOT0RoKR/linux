@@ -489,6 +489,7 @@ kmem_cache_create_usercopy(const char *name, size_t size, size_t align,
 	    WARN_ON(size < usersize || size - usersize < useroffset))
 		usersize = useroffset = 0;
 
+    // IMRT >> Mergeable cache가 있을 경우 alias로 등록하고, 그대로 사용.
 	if (!usersize)
 		s = __kmem_cache_alias(name, size, align, flags, ctor);
 	if (s)
@@ -500,6 +501,7 @@ kmem_cache_create_usercopy(const char *name, size_t size, size_t align,
 		goto out_unlock;
 	}
 
+    // IMRT >> Mergeable cache가 없을 경우, 새로 cache를 생성한다.
 	s = create_cache(cache_name, size, size,
 			 calculate_alignment(flags, align, size),
 			 flags, useroffset, usersize, ctor, NULL, NULL);
@@ -938,6 +940,7 @@ void __init create_boot_cache(struct kmem_cache *s, const char *name, size_t siz
 	s->refcount = -1;	/* Exempt from merging for now */
 }
 
+// IMRT >> 전역 kmem_cache에서 공간을 할당받아, kmalloc을 위한 cache를 만들어준다.
 struct kmem_cache *__init create_kmalloc_cache(const char *name, size_t size,
 				slab_flags_t flags, size_t useroffset,
 				size_t usersize)
@@ -1062,13 +1065,14 @@ const struct kmalloc_info_struct kmalloc_info[] __initconst = {
  * Make sure that nothing crazy happens if someone starts tinkering
  * around with ARCH_KMALLOC_MINALIGN
  */
+// IMRT >> kmalloc 요청이 들어올 경우, 요청한 크기에 대해서 적절한 kmalloc_info와 연결해준다.
 void __init setup_kmalloc_cache_index_table(void)
 {
 	int i;
 
 	BUILD_BUG_ON(KMALLOC_MIN_SIZE > 256 ||
 		(KMALLOC_MIN_SIZE & (KMALLOC_MIN_SIZE - 1)));
-
+// IMRT >> L1 Data Cache 사이즈보다 작은 요청에 대해서, KMALLOC의 가장 작은 단위 (ARM64에서는 L1 cache 사이즈)로 고정한다.
 	for (i = 8; i < KMALLOC_MIN_SIZE; i += 8) {
 		int elem = size_index_elem(i);
 
@@ -1076,7 +1080,7 @@ void __init setup_kmalloc_cache_index_table(void)
 			break;
 		size_index[elem] = KMALLOC_SHIFT_LOW;
 	}
-
+// IMRT >> L1 cache line size가 64 이상이면 96 byte의 kmem_cache를 사용하지 않는다.
 	if (KMALLOC_MIN_SIZE >= 64) {
 		/*
 		 * The 96 byte size cache is not used if the alignment
@@ -1087,6 +1091,7 @@ void __init setup_kmalloc_cache_index_table(void)
 
 	}
 
+// IMRT >> L1 cache line size가 128 이상이면 192 byte의 kmem_cache를 사용하지 않는다.
 	if (KMALLOC_MIN_SIZE >= 128) {
 		/*
 		 * The 192 byte sized cache is not used if the alignment
@@ -1114,6 +1119,9 @@ void __init create_kmalloc_caches(slab_flags_t flags)
 {
 	int i;
 
+    // IMRT >> KMALLOC_SHIFT_LOW 부터 KMALLOC_SHIFT_HIGH까지 실제 kmem_cache를 할당해준다.
+    //      >> KMALLOC_SHIFT_LOW : L1 data cache size에 따라 달라진다.
+    //      >> KMALLOC_SHIFT_HIGH : page size에 따라 달라진다. 
 	for (i = KMALLOC_SHIFT_LOW; i <= KMALLOC_SHIFT_HIGH; i++) {
 		if (!kmalloc_caches[i])
 			new_kmalloc_cache(i, flags);
@@ -1123,6 +1131,7 @@ void __init create_kmalloc_caches(slab_flags_t flags)
 		 * These have to be created immediately after the
 		 * earlier power of two caches
 		 */
+        // IMRT >> 96, 192에 대해서 따로 만들 필요가 있을 경우, 제일 첫 루프에서 생성한다. 
 		if (KMALLOC_MIN_SIZE <= 32 && !kmalloc_caches[1] && i == 6)
 			new_kmalloc_cache(1, flags);
 		if (KMALLOC_MIN_SIZE <= 64 && !kmalloc_caches[2] && i == 7)
@@ -1132,6 +1141,7 @@ void __init create_kmalloc_caches(slab_flags_t flags)
 	/* Kmalloc array is now usable */
 	slab_state = UP;
 
+// IMRT >> ZONE_DMA 에 대한 할당 요청에 대응하는 kmalloc_dma_caches 캐시를 만든다.
 #ifdef CONFIG_ZONE_DMA
 	for (i = 0; i <= KMALLOC_SHIFT_HIGH; i++) {
 		struct kmem_cache *s = kmalloc_caches[i];

@@ -176,6 +176,10 @@ void __init page_ext_init_flatmem(void)
 
 	int nid, fail;
 
+    // IMRT >> 
+    /* CONFIG_DEBUG_PAGEALLOC 혹은 CONFIG_PAGE_OWNER이 설정되어 있을때 page_ext가 설정된다.
+       (page_ext_operations 확인)
+     */
 	if (!invoke_need_callbacks())
 		return;
 

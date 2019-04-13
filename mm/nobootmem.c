@@ -106,6 +106,9 @@ static void __init __free_pages_memory(unsigned long start, unsigned long end)
 		while (start + (1UL << order) > end)
 			order--;
 
+        // IMRT >> start~end 영역을 적절하게 order를 주어 쪼갠 뒤, buddy 시스템에 등록한다.
+        // - buddy 시스템 core 위치는 zone->free_area이다. __free_pages 참고.
+        // - 적절하게 order를 주어 쪼개는 방법은 그림 4-44 참고.
 		__free_pages_bootmem(pfn_to_page(start), start, order);
 
 		start += (1UL << order);
@@ -135,6 +138,7 @@ static unsigned long __init free_low_memory_core_early(void)
 
 	memblock_clear_hotplug(0, -1);
 
+    // IMRT >> memblock의 reserved 영역을 page struct에도 표시한다.
 	for_each_reserved_mem_region(i, &start, &end)
 		reserve_bootmem_region(start, end);
 
@@ -143,6 +147,7 @@ static unsigned long __init free_low_memory_core_early(void)
 	 *  because in some case like Node0 doesn't have RAM installed
 	 *  low ram will be on Node1
 	 */
+    // IMRT >> memblock의 reserved 표시되어 있지 않은 영역을 각각 돌며, 버디 시스템에 등록한다.
 	for_each_free_mem_range(i, NUMA_NO_NODE, MEMBLOCK_NONE, &start, &end,
 				NULL)
 		count += __free_memory_core(start, end);
@@ -182,8 +187,10 @@ unsigned long __init free_all_bootmem(void)
 {
 	unsigned long pages;
 
+    // IMRT >> zone의 managed_pages를 우선 0으로 초기화하고 시작.
 	reset_all_zones_managed_pages();
 
+    // IMRT >> 버디 시스템 초기화
 	pages = free_low_memory_core_early();
 	totalram_pages += pages;
 
