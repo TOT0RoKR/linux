@@ -514,10 +514,13 @@ static void __init mm_init(void)
 	pgtable_init();
     // IMRT >> vmalloc 초기화.
 	vmalloc_init();
+    // IMRT >> huge page를 위한 ioremap 초기화 설정
 	ioremap_huge_init();
 	/* Should be run before the first non-init thread is created */
+    // IMRT >> X86만 동작
 	init_espfix_bsp();
 	/* Should be run after espfix64 is set up. */
+    // IMRT >> X86만 동작
 	pti_init();
 }
 
@@ -616,7 +619,7 @@ asmlinkage __visible void __init start_kernel(void)
 	sort_main_extable();
     // IMRT >> break_hook에 미리 선언된 bug_break_hook 핸들러를 등록한다.
 	trap_init();
-    // IMRT >> 2.23
+    // IMRT >> kernel memory allocator들을 설정한다. (slab/slub/slob, 버디 시스템, vmalloc등) 
 	mm_init();
 
 	ftrace_init();

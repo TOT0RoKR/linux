@@ -29,7 +29,9 @@ early_param("nohugeiomap", set_nohugeiomap);
 
 void __init ioremap_huge_init(void)
 {
+    // IMRT >> huge ioremap을 지원하고
 	if (!ioremap_huge_disabled) {
+        // 현재 아키텍트가 pud, pmd 레벨에서 ioremap을 지원하는 경우 각각을 설정한다.
 		if (arch_ioremap_pud_supported())
 			ioremap_pud_capable = 1;
 		if (arch_ioremap_pmd_supported())

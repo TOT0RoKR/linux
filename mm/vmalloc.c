@@ -399,6 +399,13 @@ static BLOCKING_NOTIFIER_HEAD(vmap_notify_list);
  * Allocate a region of KVA of the specified size and alignment, within the
  * vstart and vend.
  */
+/* IMRT>>
+ * - free_vmap_cache가 vstart ~ vend 사이에 있을 경우 이용한다. 없다면 nocache로 이동하여, RB tree에서 vstart 바로 뒤의 노드를 first로 설정한다.
+ * - free_vmap_cache가 유효할 경우 first로 설정한다.
+ * - list를 이용하여 first 뒤쪽에 size만큼 alloc 가능한 공간을 탐색한다.
+ * - first->va_end가 vend를 넘어갈 경우, nocache로 이동한다.
+ * - 모두 실패할 경우, 나중에 해지할 purge_list를 지운 후 다시 시도한다. 
+ */
 static struct vmap_area *alloc_vmap_area(unsigned long size,
 				unsigned long align,
 				unsigned long vstart, unsigned long vend,
@@ -554,6 +561,7 @@ static void __free_vmap_area(struct vmap_area *va)
 {
 	BUG_ON(RB_EMPTY_NODE(&va->rb_node));
 
+    // IMRT >> free_vmap_cache가 존재하고, va_end < cached_vstart일 경우 free_vmap_cache를 업데이트 해준다.
 	if (free_vmap_cache) {
 		if (va->va_end < cached_vstart) {
 			free_vmap_cache = NULL;
@@ -569,6 +577,7 @@ static void __free_vmap_area(struct vmap_area *va)
 			}
 		}
 	}
+    // IMRT >> RB Tree와 list에서 vmap_area를 제거한다.
 	rb_erase(&va->rb_node, &vmap_area_root);
 	RB_CLEAR_NODE(&va->rb_node);
 	list_del_rcu(&va->list);
@@ -582,6 +591,7 @@ static void __free_vmap_area(struct vmap_area *va)
 	if (va->va_end > VMALLOC_START && va->va_end <= VMALLOC_END)
 		vmap_area_pcpu_hole = max(vmap_area_pcpu_hole, va->va_end);
 
+    // IMRT >> vmap_area를 free한다.
 	kfree_rcu(va, rcu_head);
 }
 
@@ -681,7 +691,9 @@ static bool __purge_vmap_area_lazy(unsigned long start, unsigned long end)
 
 	lockdep_assert_held(&vmap_purge_lock);
 
+    // IMRT >> purge list를 null로 바꿔주고, 가리키던 값을 리턴한다.
 	valist = llist_del_all(&vmap_purge_list);
+    // IMRT >> 엔트리를 돌면서, 해지할 부분 전체의 시작과 끝 주소를 찾는다.
 	llist_for_each_entry(va, valist, purge_list) {
 		if (va->va_start < start)
 			start = va->va_start;
@@ -696,9 +708,11 @@ static bool __purge_vmap_area_lazy(unsigned long start, unsigned long end)
 	flush_tlb_kernel_range(start, end);
 
 	spin_lock(&vmap_area_lock);
+    // IMRT >> purge_list에서 va들을 찾아 각각을 해지한다.
 	llist_for_each_entry_safe(va, n_va, valist, purge_list) {
 		int nr = (va->va_end - va->va_start) >> PAGE_SHIFT;
 
+        // IMRT >> 찾아진 vmap_area를 제거한다.
 		__free_vmap_area(va);
 		atomic_sub(nr, &vmap_lazy_nr);
 		cond_resched_lock(&vmap_area_lock);
@@ -743,8 +757,11 @@ static void free_vmap_area_noflush(struct vmap_area *va)
 				    &vmap_lazy_nr);
 
 	/* After this point, we may free va at any time */
+    // IMRT >> va를 vmap_purge_list에 추가한다.
+    //      >> 실제 free 동작은 바로 이뤄지지 않고, 할당할 vmap 공간이 부족하거나, lazy_max_pages를 초과하는 경우 한꺼번에 이뤄진다.
 	llist_add(&va->purge_list, &vmap_purge_list);
 
+    // IMRT >> lazy 갯수가 lazy_max_pages()를 넘는 경우, purge_list 해제를 시도한다.
 	if (unlikely(nr_lazy > lazy_max_pages()))
 		try_purge_vmap_area_lazy();
 }
@@ -755,6 +772,7 @@ static void free_vmap_area_noflush(struct vmap_area *va)
 static void free_unmap_vmap_area(struct vmap_area *va)
 {
 	flush_cache_vunmap(va->va_start, va->va_end);
+    // IMRT >> 커널 페이지테이블에서 va가 매핑된 영역을 제거한다.
 	unmap_vmap_area(va);
 	free_vmap_area_noflush(va);
 }
@@ -1412,6 +1430,7 @@ static struct vm_struct *__get_vm_area_node(unsigned long size,
 	if (!(flags & VM_NO_GUARD))
 		size += PAGE_SIZE;
 
+    // IMRT >> start와 end 사이에서, size가 들어갈 수 있는 공간을 찾은 후, vmap_area로 구성하여 반환한다.
 	va = alloc_vmap_area(size, align, start, end, node, gfp_mask);
 	if (IS_ERR(va)) {
 		kfree(area);
@@ -1495,18 +1514,21 @@ struct vm_struct *remove_vm_area(const void *addr)
 
 	might_sleep();
 
+    // IMRT >> 시작주소가 addr인 vmap_area를 RB Tree에서 찾는다.
 	va = find_vmap_area((unsigned long)addr);
 	if (va && va->flags & VM_VM_AREA) {
 		struct vm_struct *vm = va->vm;
 
 		spin_lock(&vmap_area_lock);
 		va->vm = NULL;
+        // IMRT >> lazy free flag를 세팅하고, VM_VM_AREA를 클리어한다.
 		va->flags &= ~VM_VM_AREA;
 		va->flags |= VM_LAZY_FREE;
 		spin_unlock(&vmap_area_lock);
 
 		vmap_debug_free_range(va->va_start, va->va_end);
 		kasan_free_shadow(vm);
+        // IMRT >> .
 		free_unmap_vmap_area(va);
 
 		return vm;
@@ -1525,6 +1547,8 @@ static void __vunmap(const void *addr, int deallocate_pages)
 			addr))
 		return;
 
+    // IMRT >> addr이 들어있는 vmap_area를 찾아 tree및 list에서 제거하고, 해당하는 vm_struct를 반환해준다.
+    // IMRT >> vm_struct를 아래에서 해제한다.
 	area = remove_vm_area(addr);
 	if (unlikely(!area)) {
 		WARN(1, KERN_ERR "Trying to vfree() nonexistent vm area (%p)\n",
@@ -1535,6 +1559,9 @@ static void __vunmap(const void *addr, int deallocate_pages)
 	debug_check_no_locks_freed(addr, get_vm_area_size(area));
 	debug_check_no_obj_freed(addr, get_vm_area_size(area));
 
+    // IMRT >> deallocate_pages가 설정되어 있는 경우 page를 버디시스템에 다시 돌려준다.
+    //      >> vunmap의 경우 deallocate_pages가 0
+    //      >> vfree의 경우 deallocate_pages가 1
 	if (deallocate_pages) {
 		int i;
 
@@ -1542,6 +1569,7 @@ static void __vunmap(const void *addr, int deallocate_pages)
 			struct page *page = area->pages[i];
 
 			BUG_ON(!page);
+            // IMRT >> 버디 시스템에 page를 돌려준다.
 			__free_pages(page, 0);
 		}
 
@@ -1685,6 +1713,7 @@ static void *__vmalloc_area_node(struct vm_struct *area, gfp_t gfp_mask,
 
 	area->nr_pages = nr_pages;
 	/* Please note that the recursion is strictly bounded. */
+    // IMRT >> page struct 배열을 담을 공간을 할당받는다.
 	if (array_size > PAGE_SIZE) {
 		pages = __vmalloc_node(array_size, 1, nested_gfp|highmem_mask,
 				PAGE_KERNEL, node, area->caller);
@@ -1698,6 +1727,7 @@ static void *__vmalloc_area_node(struct vm_struct *area, gfp_t gfp_mask,
 		return NULL;
 	}
 
+    // IMRT >> nr_pages만큼 single page를 할당받아 area->pages를 채운다.
 	for (i = 0; i < area->nr_pages; i++) {
 		struct page *page;
 
@@ -1757,6 +1787,7 @@ void *__vmalloc_node_range(unsigned long size, unsigned long align,
 	if (!size || (size >> PAGE_SHIFT) > totalram_pages)
 		goto fail;
 
+    // IMRT >> vm_struct를 구성한다.
 	area = __get_vm_area_node(size, align, VM_ALLOC | VM_UNINITIALIZED |
 				vm_flags, start, end, node, gfp_mask, caller);
 	if (!area)
