@@ -2504,13 +2504,159 @@ static inline bool pfmemalloc_match(struct page *page, gfp_t gfpflags)
  *
  * This function must be called with interrupt disabled.
  */
+DEFINE_PER_CPU(unsigned long, try_counter);
+DEFINE_PER_CPU(unsigned long, fail_counter);
+static struct kobject *profile_obj;
+
+unsigned long try_counters;
+unsigned long fail_counters;
+
+struct profile_obj_attr {
+	struct kobj_attribute attr;
+	unsigned long *data[2];
+};
+
+static ssize_t profile_obj_show(struct kobject *kobj, struct kobj_attribute *attr,
+                    char *buf)
+{
+      struct profile_obj_attr *psa = container_of(attr, struct profile_obj_attr, attr);
+      int i, j;
+      char text[10000] = "";
+      printk("%s\n", __func__);
+
+      for (j = 0; j < 2; j++) {
+            sprintf(text, "%s %ld", text, *psa->data[j]);
+      }
+
+      return scnprintf(buf, PAGE_SIZE << 2, "%s\n", text);
+}
+
+static ssize_t profile_obj_store(struct kobject *kobj, struct kobj_attribute *attr,
+                    const char *buf, size_t len)
+
+{
+      struct profile_obj_attr *psa = container_of(attr, struct profile_obj_attr, attr);
+      int cpu;
+      int i, j;
+      printk("%s\n", __func__);
+      for_each_online_cpu(cpu) {
+		unsigned long *try = &per_cpu(try_counter, cpu);
+		unsigned long *fail = &per_cpu(try_counter, cpu);
+		int num;
+		sscanf(buf, "%d", &num);
+		*try = num;
+		*fail = num;
+      }
+      sysfs_notify(profile_obj, NULL, NULL);
+      return len;
+}
+
+static struct profile_obj_attr profile_obj_attr = {
+	.attr = __ATTR(profile_obj, 0644, profile_obj_show, profile_obj_store),
+};
+
+static struct attribute *profile_obj_attrs[] = {
+	&profile_obj_attr.attr.attr,
+	NULL
+};
+
+static struct attribute_group profile_obj_group = {
+	.attrs = profile_obj_attrs,
+};
+
+
+struct timer_list watch_profiling;
+
+static void watch_lookup_count_fn(struct timer_list *t)
+{
+	int cpu;
+
+	try_counters = 0;
+	fail_counters = 0;
+
+	for_each_online_cpu(cpu) {
+		unsigned long *try = &per_cpu(try_counter, cpu);
+		unsigned long *fail = &per_cpu(try_counter, cpu);
+		try_counters += *try;
+		fail_counters += *fail;
+	}
+
+	mod_timer(t, jiffies + msecs_to_jiffies(1000));
+}
+
+static void profile_counter_init(void)
+{
+	int cpu;
+	int i, j;
+
+	for_each_online_cpu(cpu) {
+		unsigned long *try = &per_cpu(try_counter, cpu);
+		unsigned long *fail = &per_cpu(try_counter, cpu);
+		*try = 0;
+		*fail = 0;
+	}
+
+	timer_setup(&watch_profiling, watch_lookup_count_fn, 0);
+	watch_profiling.expires = jiffies + msecs_to_jiffies(2000);
+	add_timer(&watch_profiling);
+}
+
+
+
+int __init profile_obj_init(void)
+{
+	int ret = 0;
+	printk("%s\n", __func__);
+
+	try_counters = 0;
+	fail_counters = 0;
+	profile_obj_attr.data[0] = &try_counters;
+	profile_obj_attr.data[1] = &fail_counters;
+
+	profile_obj = kobject_create_and_add("profile_obj", NULL);
+	if (!profile_obj) {
+		printk("%s: kobj crt and add() faile\n", __func__);
+		return -1;
+	}
+	ret = sysfs_create_group(profile_obj, &profile_obj_group);
+	if (ret)
+		printk("%s: sysfs crt grp() failed. ret=%d\n", __func__, ret);
+	profile_counter_init();
+
+	return ret;
+}
+EXPORT_SYMBOL(profile_obj_init);
+
+static void __exit profile_obj_exit(void)
+{
+	if (profile_obj) {
+		kobject_put(profile_obj);
+	}
+	printk("%s\b", __func__);
+}
+
+inline unsigned long try_count_inc(void)
+{
+	unsigned long *try = &per_cpu(try_counter, smp_processor_id());
+	return *try += 1;
+}
+
+inline unsigned long fail_count_inc(void)
+{
+	unsigned long *fail = &per_cpu(fail_counter, smp_processor_id());
+	return *fail += 1;
+}
+
 static inline void *get_freelist(struct kmem_cache *s, struct page *page)
 {
 	struct page new;
 	unsigned long counters;
 	void *freelist;
 
+	try_count_inc();
+
 	do {
+		fail_count_inc();
 		freelist = page->freelist;
 		counters = page->counters;
 
@@ -4273,6 +4419,9 @@ void __init kmem_cache_init(void)
 
 void __init kmem_cache_init_late(void)
 {
+	profile_obj_init();
+
+
 }
 
 struct kmem_cache *
